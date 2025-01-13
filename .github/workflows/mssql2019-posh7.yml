@@ -1,0 +1,122 @@
+name: mssql2019-posh7
+
+on:
+  push:
+    branches:
+      - '**'             # Run on all branches
+  schedule:
+    - cron: '0 3 * * *'  # Runs at 3am UTC every day
+  workflow_dispatch:
+
+jobs:
+  run_auto-masklet:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install rgclone CLI
+        id: installCLI
+        env:
+          RGCLONE_API_ENDPOINT: ${{ secrets.RGCLONE_API_ENDPOINT }}
+          RGCLONE_ACCESS_TOKEN: ${{ secrets.RGCLONE_ACCESS_TOKEN }}
+        run: |
+          # Download the rgclone CLI
+          $downloadUrl = $env:RGCLONE_API_ENDPOINT + "cloning-api/download/cli/windows-amd64"
+          $zipFile = ".\rgclone.zip"
+          $rgCloneLocation = "."
+          Write-Output "  Downloading rgclone.exe zip file..."
+          Write-Output "    from: $downloadUrl"
+          Write-Output "    to:   $zipFile"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile
+          Write-Output "  Extracting zip to: $rgCloneLocation"
+          Add-Type -assembly "System.IO.Compression.Filesystem";
+          [IO.Compression.Zipfile]::ExtractToDirectory($zipFile, $rgCloneLocation);
+          
+      - name: Create data image
+        id: createIm
+        env:
+          RGCLONE_API_ENDPOINT: ${{ secrets.RGCLONE_API_ENDPOINT }}
+          RGCLONE_ACCESS_TOKEN: ${{ secrets.RGCLONE_ACCESS_TOKEN }}
+        run: |
+          $emptyDiName = 'autoMasklet-sqlserver-2019-empty'
+          $output = .\rgclone get di $emptyDiName --ignore-not-found -o json
+          if ($output -eq $null -or $output -eq "") {
+              Write-Output "Image does not exist. Creating image..."
+              .\rgclone create di -f .\helper_scripts\empty-image.yaml
+          } else {
+              Write-Output "Image already exists. Moving on..."
+          }
+                    
+      - name: Create data container
+        id: createDc
+        env:
+          RGCLONE_API_ENDPOINT: ${{ secrets.RGCLONE_API_ENDPOINT }}
+          RGCLONE_ACCESS_TOKEN: ${{ secrets.RGCLONE_ACCESS_TOKEN }}
+        run: |
+          # Create an empty SQL Server instance on which to run auto-masklet
+          Write-Output "Creating data container"
+          $emptyDiName = 'autoMasklet-sqlserver-2019-empty'
+          $output = .\rgclone create dc -i $emptyDiName -t 20m -o json | ConvertFrom-Json
+          $dbPassword = $output.password
+          $dbUser = $output.user
+          $sqlhost = $output.host
+          $sqlport = $output.port
+          $instance = "${sqlhost},${sqlport}"
+          Write-Output "Data container created successfully and available at: $instance"
+
+          # Set output values so that I can use them in subsequent steps
+          echo "::set-output name=dbUser::$dbUser"
+          echo "::set-output name=dbPassword::$dbPassword"
+          echo "::set-output name=instance::$instance"
+
+      - name: Run AutoMasklet in PowerShell 7
+        shell: pwsh
+        env:
+          REDGATE_LICENSING_PERMIT: ${{ secrets.REDGATE_LICENSING_PERMIT }}
+        run: |
+          Write-Output 'Running in PowerShell 7'
+          $PSVersionTable
+          $psVersion = $PSVersionTable.PSVersion.Major
+          if ($psVersion -notlike "7"){
+            Write-Error "PowerShell version should be 7, but it is $psVersion"
+            exit 1
+          }
+          Write-Output 'Running Auto-Masklet...'
+          Write-Output "  -sqlInstance '${{ steps.createDc.outputs.instance }}'"
+          Write-Output "  -sqlUser '${{ steps.createDc.outputs.dbUser }}'"
+          .\run-auto-masklet.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth
+  
+      - name: Validating results
+        shell: pwsh
+        if: ${{ always() }}
+        run: |
+          import-module dbatools
+          Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
+          Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
+          $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ steps.createDc.outputs.dbUser }}, (ConvertTo-SecureString ${{ steps.createDc.outputs.dbPassword }} -AsPlainText -Force)
+          
+          # Validating rgsubset
+          $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
+          Write-Output "If rgsubset ran successfully, there should be 12 orders in the Northwind_Subset database"
+          Write-Output "Total Orders: $totalOrders"
+          if ($totalOrders -eq 12) {
+            Write-Output "rgsubset ran successfully"
+          } else {
+            Write-Error "rgsubset did not run successfully"
+            exit 1
+          }
+
+          # Validating rganonymize
+          $order10248City = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT ShipCity FROM dbo.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
+          Write-Output "If rganonymize ran successfully, order 10248 should NOT be Reims"
+          Write-Output "ShipCity: $order10248City"
+          if ($order10248City -like "Reims") {
+            Write-Error "rganonymize did not run successfully"
+            exit 1
+          } else {
+            Write-Output "rganonymize ran successfully"
+          }
+
+
