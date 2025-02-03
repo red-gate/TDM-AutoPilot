@@ -1,9 +1,9 @@
 name: mssql2019-posh5
 
 on:
-  push:
+  pull_request:
     branches:
-      - '**'             # Run on all branches
+      - release
   schedule:
     - cron: '0 3 * * *'  # Runs at 3am UTC every day
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
 jobs:
   run_auto-masklet:
     runs-on: windows-latest
+    environment: 'build-posh5'
 
     steps:
       - name: Checkout code
