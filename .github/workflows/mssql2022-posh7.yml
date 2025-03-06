@@ -14,7 +14,7 @@ on: # push, pr, nightly, and on demand, for all branches
 jobs:
   run-masklet-sql22-psh7:
     runs-on: windows-latest
-    name: run-masklet-sql22-psh7
+    name: run-tdm-autopilot-sql22-psh7
     environment: 'build-posh7'
     steps:
       - name: Checkout code
@@ -112,7 +112,7 @@ jobs:
           echo "::set-output name=dbPassword::$dbPassword"
           echo "::set-output name=instance::$instance"
 
-      - name: Run AutoMasklet in PowerShell 7
+      - name: Run Autopilot for TDM in PowerShell 7
         shell: pwsh
         env:
           REDGATE_LICENSING_PERMIT: ${{ secrets.REDGATE_LICENSING_PERMIT }}
@@ -124,10 +124,10 @@ jobs:
             Write-Error "PowerShell version should be 7, but it is $psVersion"
             exit 1
           }
-          Write-Output 'Running Auto-Masklet...'
+          Write-Output 'Running Autopilot for TDM...'
           Write-Output "  -sqlInstance '${{ steps.createDc.outputs.instance }}'"
           Write-Output "  -sqlUser '${{ steps.createDc.outputs.dbUser }}'"
-          .\run-auto-masklet.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
+          .\run-tdm-autopilot.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
   
       - name: Validating results
         shell: pwsh
