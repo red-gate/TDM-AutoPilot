@@ -118,7 +118,8 @@ Function Install-TdmCli {
 
     # Download a fresh file with the latest version of the code
     Write-Verbose "Downloading zip file containing latest version of $cli to: $zipPath"
-    Invoke-WebRequest -Uri $downloadUrl -OutFile "$zipPath"
+    $ProgressPreference = 'SilentlyContinue'  # Disable slow progress updates
+	Invoke-WebRequest -Uri $downloadUrl -OutFile "$zipPath" -UseBasicParsing
     
     # Extract the zip
     Write-Verbose "Extracting zip file to: $unzipPath"
