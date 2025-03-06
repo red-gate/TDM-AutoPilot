@@ -1,18 +1,21 @@
 name: mssql2019-posh5
 
-on:
-  pull_request:
+on: # push, pr, nightly, and on demand, for all branches 
+  # push:
+  #   branches-ignore:  # Prevents duplicate runs on PRs
+  #     - release
+  pull_request:  # Ensures PRs to main must pass the check
     branches:
-      - release
+      - release                      
   schedule:
-    - cron: '0 3 * * *'  # Runs at 3am UTC every day
+    - cron: '0 3 * * *' 
   workflow_dispatch:
 
 jobs:
-  run_auto-masklet:
+  run-masklet-sql19-psh5:
     runs-on: windows-latest
+    name: run-masklet-sql19-psh5
     environment: 'build-posh5'
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -30,7 +33,8 @@ jobs:
           Write-Output "  Downloading rgclone.exe zip file..."
           Write-Output "    from: $downloadUrl"
           Write-Output "    to:   $zipFile"
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile
+          $ProgressPreference = 'SilentlyContinue'  # Disable slow progress updates
+          Invoke-WebRequest -Uri $downloadUrl -OutFile "$zipFile" -UseBasicParsing
           Write-Output "  Extracting zip to: $rgCloneLocation"
           Add-Type -assembly "System.IO.Compression.Filesystem";
           [IO.Compression.Zipfile]::ExtractToDirectory($zipFile, $rgCloneLocation);
@@ -43,11 +47,47 @@ jobs:
         run: |
           $emptyDiName = 'autoMasklet-sqlserver-2019-empty'
           $output = .\rgclone get di $emptyDiName --ignore-not-found -o json
+          $imageStatus = ($output | ConvertFrom-Json).Status
           if ($output -eq $null -or $output -eq "") {
               Write-Output "Image does not exist. Creating image..."
-              .\rgclone create di -f .\helper_scripts\empty-image.yaml
-          } else {
+              .\rgclone create di -f .\helper_scripts\empty-image-2019.yaml
+          } 
+          elseif ($imageStatus -like "Completed") {
               Write-Output "Image already exists. Moving on..."
+          } 
+          elseif ($imageStatus -like "Pending") {
+              Write-Output "Image creation is Pending. Waiting until ready. (Image creation usually takes about 60 seconds)..."
+              $stopwatch =  [system.diagnostics.stopwatch]::StartNew()
+              while ($stopwatch.Elapsed.TotalSeconds -lt 315) {
+                  Start-Sleep -Seconds 10
+                  $output = .\rgclone get di $emptyDiName --ignore-not-found -o json
+                  $imageStatus = ($output | ConvertFrom-Json).Status
+                  $elapsedSeconds = $stopwatch.Elapsed.TotalSeconds
+                  Write-Output "  ${elapsedSeconds} seconds: Image status is $imageStatus"
+
+                  if ($imageStatus -like "Completed") {
+                      $stopwatch.Stop()
+                      break
+                  }
+                  elseif ($imageStatus -like "Create Failed") {
+                      Write-Error "Image creation failed!"
+                      $stopwatch.Stop()
+                      break
+                  }
+                  elseif ($imageStatus -notlike "Pending") {
+                      Write-Warning "  ${elapsedSeconds} seconds: Image state is neither "Completed", "Failed", nor "Pending". Something unexpected happened. Exiting."
+                      $stopwatch.Stop()
+                      break
+                  }                  
+                  if ($elapsedSeconds -ge 300) {
+                      Write-Warning "  ${elapsedSeconds} seconds: Image creation is taking longer than expected. Crossing our fingers and moving on..."
+                      $stopwatch.Stop()
+                      break
+                  }   
+              }
+          }
+          else {
+              Write-Warning "Image is in an unexpected state (neither "Completed", "Pending", nor NULL). Image status is: $imageStatus"
           }
                     
       - name: Create data container
@@ -87,7 +127,7 @@ jobs:
           Write-Output 'Running Auto-Masklet...'
           Write-Output '  -sqlInstance ${{ steps.createDc.outputs.instance }}'
           Write-Output '  -sqlUser ${{ steps.createDc.outputs.dbUser }}'
-          .\run-auto-masklet.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth
+          .\run-auto-masklet.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
 
       - name: Validating results
         shell: powershell

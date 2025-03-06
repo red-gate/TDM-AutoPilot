@@ -7,8 +7,25 @@ param (
     $backupPath = "",
     $databaseName = "Northwind",
     [switch]$autoContinue,
-    [switch]$skipAuth
+    [switch]$skipAuth,
+    [switch]$noRestore,
+    [switch]$iAgreeToTheRedgateEula
 )
+
+# Userts must agree to the Redgate Eula, either by using the -iAgreeToTheRedgateEula parameter, or by responding to a prompt
+if (-not $iAgreeToTheRedgateEula){
+    if ($autoContinue){
+        Write-Error 'If using the -autoContinue parameter, the -iAgreeToTheRedgateEula parameter is also required.'
+        break
+    }
+    else {
+        $eulaResponse = Read-Host "Do you agree to the Redgate End User License Agreement (EULA)? (y/n)"
+        if ($eulaResponse -notlike "y"){
+            Write-output 'Response not like "y". Teminating script.'
+            break
+        }
+    }
+}
 
 # Configuration
 $sourceDb = "${databaseName}_FullRestore"
@@ -50,6 +67,7 @@ Write-Output "- targetConnectionString:  $targetConnectionString"
 Write-Output "- output:                  $output"
 Write-Output "- trustCert:               $trustCert"
 Write-Output "- backupPath:              $backupPath"
+Write-Output "- noRestore:               $noRestore"
 Write-Output ""
 Write-Output "Initial setup:"
 
@@ -126,8 +144,16 @@ Write-Output "rganonymize version is:"
 rganonymize --version
 Write-Output ""
 
-# Building staging databases
-if ($backupPath) {
+# Skipping restore, user has created databases
+if ($noRestore){
+    Write-Output "*********************************************************************************************************"
+    Write-Output "Skipping database restore and creation."
+    Write-Output "Please ensure that the source and target databases are already created and available on the $sqlInstance server."
+    Write-Output "*********************************************************************************************************"
+}
+else {
+    # Building staging databases
+  if ($backupPath) {
     # Using the Restore-StagingDatabasesFromBackup function in helper-functions.psm1 to build source and target databases from an existing backup
     Write-Output "  Building $sourceDb and $targetDb databases from backup file saved at $BackupPath."
     $dbCreateSuccessful = Restore-StagingDatabasesFromBackup -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -sourceBackupPath:$backupPath -SqlCredential:$SqlCredential
@@ -138,8 +164,8 @@ if ($backupPath) {
         Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
         break
     }
-}
-else {
+  }
+  else {
     # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
     Write-Output "  Building sample Northwind source and target databases."
     $dbCreateSuccessful = New-SampleDatabases -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
@@ -150,6 +176,7 @@ else {
         Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
         break
     }
+  }
 }
 
 # Clean output directory
@@ -203,13 +230,28 @@ else {
 Write-Output "*********************************************************************************************************"
 Write-Output ""
 
-if (-not $autoContinue){
-    $continue = Read-Host "Continue? (y/n)"
-    if ($continue -notlike "y"){
-        Write-output 'Response not like "y". Teminating script.'
-        break
+# Creating the function for Y/N prompt
+
+function Prompt-Continue {
+
+    if ($autoContinue) {
+        Write-Output 'Auto-continue mode enabled. Proceeding without user input.'
+    } else {
+        $continueLoop = $true
+
+        while ($continueLoop) {
+            $continue = Read-Host "Continue? (y/n)"
+            switch ($continue.ToLower()) {
+                "y" { Write-Output 'User chose to continue.'; $continueLoop = $false }
+                "n" { Write-Output 'User chose "n". Terminating script.'; exit }
+                default { Write-Output 'Invalid response. Please enter "y" or "n".' }
+            }
+        }
     }
 }
+
+
+Prompt-Continue
 
 # running subset
 Write-Output ""
@@ -233,13 +275,7 @@ Write-Output "  rganonymize classify --database-engine SqlServer --connection-st
 Write-Output "*********************************************************************************************************"
 Write-Output ""
 
-if (-not $autoContinue){
-    $continue = Read-Host "Continue? (y/n)"
-    if ($continue -notlike "y"){
-        Write-output 'Response not like "y". Teminating script.'
-        break
-    }
-}
+Prompt-Continue
 
 Write-Output "Creating a classification.json file in $output"
 rganonymize classify --database-engine SqlServer --connection-string=$targetConnectionString --classification-file "$output\classification.json" --output-all-columns
@@ -260,13 +296,7 @@ Write-Output "  rganonymize map --classification-file `"$output\classification.j
 Write-Output "*********************************************************************************************************"
 Write-Output ""
 
-if (-not $autoContinue){
-    $continue = Read-Host "Continue? (y/n)"
-    if ($continue -notlike "y"){
-        Write-output 'Response not like "y". Teminating script.'
-        break
-    }
-}
+Prompt-Continue
 
 Write-Output "Creating a masking.json file based on contents of classification.json in $output"
 rganonymize map --classification-file="$output\classification.json" --masking-file="$output\masking.json"
@@ -286,13 +316,7 @@ Write-Output "  rganonymize mask --database-engine SqlServer --connection-string
 Write-Output "*********************************************************************************************************"
 Write-Output ""
 
-if (-not $autoContinue){
-    $continue = Read-Host "Continue? (y/n)"
-    if ($continue -notlike "y"){
-        Write-output 'Response not like "y". Teminating script.'
-        break
-    }
-}
+Prompt-Continue
 
 Write-Output "Masking target database, based on contents of masking.json file in $output"
 rganonymize mask --database-engine SqlServer --connection-string=$targetConnectionString --masking-file="$output\masking.json"
