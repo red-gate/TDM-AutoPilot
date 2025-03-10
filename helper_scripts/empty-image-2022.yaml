@@ -1,5 +1,5 @@
 sourceType: empty
-name: autoMasklet-sqlserver-2022-empty
+name: autopilot-sqlserver-2022-empty
 engine: mssql
 version: 2022
 lifetime: 336h

@@ -2,7 +2,7 @@ param (
     $sqlInstance = "localhost",
     $sqlUser = "",
     $sqlPassword = "",
-    $output = "C:/temp/auto-masklet",
+    $output = "C:/temp/tdm-autopilot",
     $trustCert = $true,
     $backupPath = "",
     $databaseName = "Northwind",

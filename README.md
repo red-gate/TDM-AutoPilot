@@ -1,4 +1,4 @@
-# TDM-AutoMasklet
+# TDM-Autopilot
 A Test Data Manager subsetting and anonymization worked example.
 
 You can read more about this project in [a blog post by Steve Jones, available here](https://voiceofthedba.com/2024/07/10/up-and-running-quickly-with-test-data-manager/), and you can watch a 10 minute video about it here:
@@ -8,7 +8,7 @@ You can read more about this project in [a blog post by Steve Jones, available h
 ## Purpose
 This project exists as a minimal viable proof of concept for the rgsubsetter and rganonymize CLIs that come with Redgate Test Data Manager.
 
-The run-auto-masklet.ps1 powershell script walks you through the steps required to subset and mask the PII in a sample database.
+The run-tdm-autopilot.ps1 powershell script walks you through the steps required to subset and mask the PII in a sample database.
 
 The ojective is to give users an easy way to get started with the CLIs, and to understand their usage.
 
@@ -36,20 +36,20 @@ Set-ExecutionPolicy RemoteSigned
     ```
        git clone https://github.com/alex-yates-redgate/TDM-AutoMasklet.git
     ```
-    2. **To download the code as a zip file:** Click the green "<> Code" button [on the home page for this repo](https://github.com/alex-yates-redgate/TDM-AutoMasklet), and select "Download ZIP". Then extract the zip file as you see fit. Finally, review the note under [System Setup (above)](https://github.com/alex-yates-redgate/TDM-AutoMasklet?tab=readme-ov-file#system-set-up) about PowerShell Execution Policies, and ensure the PowerShell Execution Policy on your machine is appropriately configured.
-2. Review the file [.\run-auto-masklet.ps1](https://github.com/alex-yates-redgate/TDM-AutoMasklet/blob/main/run-auto-masklet.ps1). In particular, pay attention to the "param" (parameters) section at the top. This section assumes your SQL Instance is running on localhost, and that you would like to output your files to C:/temp/auto-masklet. (This directory will be cleaned and recreated each time you run the script). If you would like to use a different SQL Instance or output directory, update the config as appropriate.
+    2. **To download the code as a zip file:** Click the green "<> Code" button [on the home page for this repo](https://github.com/red-gate/TDM-AutoPilot), and select "Download ZIP". Then extract the zip file as you see fit. Finally, review the note under [System Setup (above)](https://github.com/red-gate/TDM-AutoPilot?tab=readme-ov-file#system-set-up) about PowerShell Execution Policies, and ensure the PowerShell Execution Policy on your machine is appropriately configured.
+2. Review the file [.\run-tdm-autopilot.ps1](https://github.com/red-gate/TDM-AutoPilot/blob/main/run-auto-masklet.ps1). In particular, pay attention to the "param" (parameters) section at the top. This section assumes your SQL Instance is running on localhost, and that you would like to output your files to C:/temp/tdm-autopilot. (This directory will be cleaned and recreated each time you run the script). If you would like to use a different SQL Instance or output directory, update the config as appropriate.
 3. Navigate to the directory you copied the code to, and then run the script in a PowerShell window. The script will download, configure, and start a new trial for the TDM CLIs. Note, during licence/trial activation, a web browser may open, and you may be required to log into the Redgate licencing portal.
 
 Using the default sample databases (run script without options)
 ```
-cd TDM-AutoMasklet      # Navigate to the directory you cloned the repo to/extracted the zip file to
-.\run-auto-masklet.ps1  # Run the default script
+cd TDM-AutoPilot      # Navigate to the directory you cloned the repo to/extracted the zip file to
+.\run-tdm-autopilot.ps1  # Run the default script
 ```
 
 Using a custom backup file (run script with options)
 ```
-cd TDM-AutoMasklet      # Navigate to the directory you cloned the repo to/extracted the zip file to
-.\run-auto-masklet.ps1 -backupPath "path_to_backup_file" -databaseName "database_name" # Run the script with options
+cd TDM-AutoPilot      # Navigate to the directory you cloned the repo to/extracted the zip file to
+.\run-tdm-autopilot.ps1 -backupPath "path_to_backup_file" -databaseName "database_name" # Run the script with options
 ```
 4. If you ran the script without a custom backup file, it will create a couple of sample databases for you (by default, Northwind_FullRestore and Northwind_Subset). If these databases already exist, they will be dropped and recreated.<br />
 If you ran the script with a custom backup file, it will create the databases from your provided backup file (database_name_FullRestore and database_name_Subset).<br />
