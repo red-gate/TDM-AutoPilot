@@ -12,7 +12,7 @@ on: # push, pr, nightly, and on demand, for all branches
   workflow_dispatch:
 
 jobs:
-  run-masklet-sql22-psh5:
+  run-autopilot-sql22-psh5:
     runs-on: windows-latest
     name: run-tdm-autopilot-sql22-psh5
     environment: 'build-posh5'
