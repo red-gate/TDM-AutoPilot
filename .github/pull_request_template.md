@@ -1,6 +1,6 @@
 ### Reviewer Guidance
 
-- [ ] The vision for TDM-AutoMasklet is "git clone f5". In an ideal world, it should be possible to run the script, without any parameters, and to deliver a minimal viable shrink-wrapped PoC. The bar for any PR is that it should contribute toward this goal, more than it detracts from it.
+- [ ] The vision for TDM-Autopilot is "git clone f5". In an ideal world, it should be possible to run the script, without any parameters, and to deliver a minimal viable shrink-wrapped PoC. The bar for any PR is that it should contribute toward this goal, more than it detracts from it.
 - [ ] Does the code have appropriate comments? Is it easy to read and understand?
 - [ ] If the code adds new functionality, is that functionality documented appropriately?
 - [ ] Do the GitHub Actions run successfully?
