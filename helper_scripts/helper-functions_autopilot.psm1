@@ -61,10 +61,10 @@ Function New-SampleDatabases {
     # If exists, drop the source and target databases
     Write-Verbose "  If exists, dropping the source and target databases"
     if ($winAuth){
-        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb
+        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb,'AutopilotBuild','AutopilotTest','AutopilotProd','AutopilotProd','AutopilotShadow'
     }
     else {
-        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb -SqlCredential $SqlCredential
+        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb,'AutopilotBuild','AutopilotTest','AutopilotProd','AutopilotProd','AutopilotShadow' -SqlCredential $SqlCredential
     }
 
     forEach ($db in $dbsToDelete.Name){
@@ -75,20 +75,38 @@ Function New-SampleDatabases {
 
     # Create the fullRestore and subset databases
     Write-Verbose "  Creating the fullRestore and subset databases"
-    New-DbaDatabase -SqlInstance $sqlInstance -Name $sourceDb, $targetDb -SqlCredential $SqlCredential | Out-Null
+    New-DbaDatabase -SqlInstance $sqlInstance -Name $sourceDb, $targetDb, 'AutopilotBuild', 'AutopilotTest', 'AutopilotProd', 'AutopilotProd', 'AutopilotShadow', 'AutopilotCheck' -SqlCredential $SqlCredential | Out-Null
     
     Write-Verbose "    Creating the $sourceDb database objects and data"
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $fullRestoreCreateScript -SqlCredential $SqlCredential | Out-Null
     
     Write-Verbose "    Creating the $targetDb database objects"
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+	
+	Write-Verbose "    Creating the AutopilotBuild database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotBuild' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+	
+	Write-Verbose "    Creating the 'AutopilotTest' database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotTest' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+	
+	Write-Verbose "    Creating the 'AutopilotProd' database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotProd' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+	
+	Write-Verbose "    Creating the 'AutopilotProd' database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotProd' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+	
+	Write-Verbose "    Creating the 'AutopilotShadow' database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotShadow' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
+
+    Write-Verbose "    Creating the 'AutopilotShadow' database objects"
+    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotCheck' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
     
     Write-Verbose "  Validating that the databases have been created correctly"
-    $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
-    $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders    
+    $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
+    $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders    
     
-    if ($totalFullRestoreOrders -ne 830){
-        Write-Error "    There should be 830 rows in $sourceDb, but there are $totalFullRestoreOrders."
+    if ($totalFullRestoreOrders -ne 1000){
+        Write-Error "    There should be 1000 rows in $sourceDb, but there are $totalFullRestoreOrders."
         return $false
     }
     if ($totalSubsetOrders -ne 0){

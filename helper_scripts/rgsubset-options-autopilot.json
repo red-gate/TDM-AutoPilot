@@ -4,11 +4,11 @@
     { 
       "table":
       {
-        "schema": "dbo",
+        "schema": "Sales",
         "name": "Orders"
       },
-      "filterClause": "OrderId < 10260"
+      "filterClause": "OrderId < 500"
     }
   ],
-  "includeTablesRowThreshold": 1
+  "includeTableRowsThreshold": 1
 }

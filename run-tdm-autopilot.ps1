@@ -2,10 +2,10 @@ param (
     $sqlInstance = "localhost",
     $sqlUser = "",
     $sqlPassword = "",
-    $output = "C:/temp/tdm-autopilot",
+    $output = "C:/temp/TDM-Autopilot",
     $trustCert = $true,
     $backupPath = "",
-    $databaseName = "Northwind",
+    $databaseName = "AutopilotDev",
     [switch]$autoContinue,
     [switch]$skipAuth,
     [switch]$noRestore,
@@ -28,14 +28,13 @@ if (-not $iAgreeToTheRedgateEula){
 }
 
 # Configuration
-$sourceDb = "${databaseName}_FullRestore"
-$targetDb = "${databaseName}_Subset"
-$fullRestoreCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindFullRestore.sql"
-$subsetCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindSubset.sql"
-$installTdmClisScript = "$PSScriptRoot/helper_scripts/installTdmClis.ps1"
-$helperFunctions = "$PSScriptRoot/helper_scripts/helper-functions.psm1"
-$subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-northwind.json"
-
+$sourceDb = "${databaseName}"
+$targetDb = "${databaseName}_Treated"
+$fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabasesFullRestore.sql"
+$subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabasesSubset.sql"
+$installTdmClisScript = "$PSScriptRoot\helper_scripts\installTdmClis.ps1"
+$helperFunctions = "$PSScriptRoot\helper_scripts\helper-functions_autopilot.psm1"
+$subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-autopilot.json"
 $winAuth = $true
 $sourceConnectionString = ""
 $targetConnectionString = ""
@@ -104,9 +103,22 @@ else {
     break
 }
 
-# Download/update rgsubset and rganonymize CLIs
-Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
-powershell -File  $installTdmClisScript 
+
+# Only prompt if autoContinue is false
+if (-not $autoContinue) {
+    $tdmInstallResponse = Read-Host "Do you want to install the latest version of TDM Data Treatments? (Default - n) (y/n)"
+} else {
+    $tdmInstallResponse = "y"  # Auto-set response to "y" for CI/CD pipelines
+}
+
+if ($tdmInstallResponse -like "y"){
+    # Download/update rgsubset and rganonymize CLIs
+    Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
+    powershell -File  $installTdmClisScript 
+}
+    if ($tdmInstallResponse -notlike "y"){
+        Write-output 'Skipping TDM Data Treatments Install Step'
+}
 
 # Refreshing the environment variables so that the new path is available
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -205,16 +217,17 @@ else {
     Write-Output "  --USE $targetDb -- Uncomment to run the same query on the target database"
     Write-Output "  "
     Write-Output "  SELECT COUNT (*) AS TotalOrders"
-    Write-Output "  FROM   dbo.Orders;"
+    Write-Output "  FROM   Sales.Orders;"
     Write-Output "  "
     Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
     Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
-    Write-Output "                  o.ShipAddress AS 'o.ShipAddress' ,"
-    Write-Output "                  o.ShipCity AS 'o.ShipCity' ,"
-    Write-Output "                  c.Address AS 'c.Address' ,"
-    Write-Output "                  c.City AS 'c.ShipCity'"
-    Write-Output "  FROM     dbo.Customers c"
-    Write-Output "           JOIN dbo.Orders o ON o.CustomerID = c.CustomerID"
+    Write-Output "                  o.OrderDate AS 'o.OrderDate' ,"
+    Write-Output "                  o.Status AS 'o.Status' ,"
+    Write-Output "                  c.FirstName AS 'c.FirstName' ,"
+    Write-Output "                  c.LastName AS 'c.LastName',"
+    Write-Output "                  c.Address AS 'c.Address'"
+    Write-Output "  FROM     Customers.Customer c"
+    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
     Write-Output "  ORDER BY o.OrderID ASC;"
 }
 Write-Output ""

@@ -10,7 +10,7 @@ on: # push, pr, nightly, and on demand, for all branches
   schedule:
     - cron: '0 3 * * *' 
   workflow_dispatch:
-
+  workflow_call:  # This enables the workflow to be called from other workflows
 jobs:
   run-autopilot-sql22-psh7:
     runs-on: windows-latest
