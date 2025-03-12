@@ -7,10 +7,12 @@ on: # push, pr, nightly, and on demand, for all branches
   pull_request:  # Ensures PRs to main must pass the check
     branches:
       - release                      
-  schedule:
-    - cron: '0 3 * * *' 
+  # schedule:
+  #   - cron: '0 3 * * *' 
   workflow_dispatch:
   workflow_call:  # This enables the workflow to be called from other workflows
+  repository_dispatch:
+    types: [daily-validation]  # Listens for dispatch events, which can trigger this workflow automatically on regular schedules
 jobs:
   run-autopilot-sql22-psh5:
     runs-on: windows-latest
