@@ -2,12 +2,11 @@ param (
     $sqlInstance = "localhost",
     $sqlUser = "",
     $sqlPassword = "",
-    $output = "C:/temp/TDM-Autopilot",
+    $output = "C:/temp/tdm-autopilot",
     $trustCert = $true,
     $backupPath = "",
-    $databaseName = "AutopilotProd",
+    $databaseName = "Northwind",
     [switch]$autoContinue,
-    [switch]$autopilotAllDatabases,
     [switch]$skipAuth,
     [switch]$noRestore,
     [switch]$iAgreeToTheRedgateEula
@@ -29,13 +28,14 @@ if (-not $iAgreeToTheRedgateEula){
 }
 
 # Configuration
-$sourceDb = "${databaseName}"
-$targetDb = "AutopilotDev"
-$fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseFullRestore.sql"
-$subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseSubset.sql"
-$installTdmClisScript = "$PSScriptRoot\helper_scripts\installTdmClis.ps1"
-$helperFunctions = "$PSScriptRoot\helper_scripts\helper-functions_autopilot.psm1"
-$subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-autopilot.json"
+$sourceDb = "${databaseName}_FullRestore"
+$targetDb = "${databaseName}_Subset"
+$fullRestoreCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindFullRestore.sql"
+$subsetCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindSubset.sql"
+$installTdmClisScript = "$PSScriptRoot/helper_scripts/installTdmClis.ps1"
+$helperFunctions = "$PSScriptRoot/helper_scripts/helper-functions.psm1"
+$subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-northwind.json"
+
 $winAuth = $true
 $sourceConnectionString = ""
 $targetConnectionString = ""
@@ -67,7 +67,6 @@ Write-Output "- targetConnectionString:  $targetConnectionString"
 Write-Output "- output:                  $output"
 Write-Output "- trustCert:               $trustCert"
 Write-Output "- backupPath:              $backupPath"
-Write-Output "- autopilotAllDatabases:   $autopilotAllDatabases"
 Write-Output "- noRestore:               $noRestore"
 Write-Output ""
 Write-Output "Initial setup:"
@@ -80,8 +79,7 @@ Write-Output "  Importing helper functions"
 import-module $helperFunctions
 $requiredFunctions = @(
     "Install-Dbatools",
-    "New-SampleDatabasesAutopilot",
-    "New-SampleDatabasesAutopilotFull",
+    "New-SampleDatabases",
     "Restore-StagingDatabasesFromBackup"
 )
 # Testing that all the required functions are available
@@ -106,22 +104,9 @@ else {
     break
 }
 
-
-# Only prompt if autoContinue is false
-if (-not $autoContinue) {
-    $tdmInstallResponse = Read-Host "Do you want to install the latest version of TDM Data Treatments? (Default - n) (y/n)"
-} else {
-    $tdmInstallResponse = "y"  # Auto-set response to "y" for CI/CD pipelines
-}
-
-if ($tdmInstallResponse -like "y"){
-    # Download/update rgsubset and rganonymize CLIs
-    Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
-    powershell -File  $installTdmClisScript 
-}
-    if ($tdmInstallResponse -notlike "y"){
-        Write-output 'Skipping TDM Data Treatments Install Step'
-}
+# Download/update rgsubset and rganonymize CLIs
+Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
+powershell -File  $installTdmClisScript 
 
 # Refreshing the environment variables so that the new path is available
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -180,23 +165,10 @@ else {
         break
     }
   }
-  if ($autopilotAllDatabases) {
-    # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
-    # Used to restore ALL autopilot databases, rather than just two which is the default
-    Write-Output "  Building all sample Autopilot databases."
-    $dbCreateSuccessful = New-SampleDatabasesAutopilotFull -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
-    if ($dbCreateSuccessful){
-        Write-Output "    All Autopilot Databases successfully created."
-    }
-    else {
-        Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
-        break
-    }
-  }
   else {
     # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
-    Write-Output "  Building sample Autopilot source and target databases."
-    $dbCreateSuccessful = New-SampleDatabasesAutopilot -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
+    Write-Output "  Building sample Northwind source and target databases."
+    $dbCreateSuccessful = New-SampleDatabases -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
     if ($dbCreateSuccessful){
         Write-Output "    Source and target databases created successfully."
     }
@@ -206,8 +178,6 @@ else {
     }
   }
 }
-$autopilotAllDatabases
-
 
 # Clean output directory
 Write-Output "  Cleaning the output directory at: $output"
@@ -235,17 +205,16 @@ else {
     Write-Output "  --USE $targetDb -- Uncomment to run the same query on the target database"
     Write-Output "  "
     Write-Output "  SELECT COUNT (*) AS TotalOrders"
-    Write-Output "  FROM   Sales.Orders;"
+    Write-Output "  FROM   dbo.Orders;"
     Write-Output "  "
     Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
     Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
-    Write-Output "                  o.OrderDate AS 'o.OrderDate' ,"
-    Write-Output "                  o.Status AS 'o.Status' ,"
-    Write-Output "                  c.FirstName AS 'c.FirstName' ,"
-    Write-Output "                  c.LastName AS 'c.LastName',"
-    Write-Output "                  c.Address AS 'c.Address'"
-    Write-Output "  FROM     Customers.Customer c"
-    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
+    Write-Output "                  o.ShipAddress AS 'o.ShipAddress' ,"
+    Write-Output "                  o.ShipCity AS 'o.ShipCity' ,"
+    Write-Output "                  c.Address AS 'c.Address' ,"
+    Write-Output "                  c.City AS 'c.ShipCity'"
+    Write-Output "  FROM     dbo.Customers c"
+    Write-Output "           JOIN dbo.Orders o ON o.CustomerID = c.CustomerID"
     Write-Output "  ORDER BY o.OrderID ASC;"
 }
 Write-Output ""
@@ -358,7 +327,8 @@ Write-Output "Observe:"
 Write-Output "The data in the $targetDb database should now be masked."
 Write-Output "Review the data in the $sourceDb and $targetDb databases. Are you happy with the way they have been subsetted and masked?"
 Write-Output "Things you may like to look out for:"
-Write-Output "  - Dependencies (e.g. If using the sample Autopilot database, observe the Customers.Customer and Sales.Orders, joined on the CustomerID column in each table"
+Write-Output "  - Notes fields (e.g. Employees.Notes)"
+Write-Output "  - Dependencies (e.g. If using the sample Northwind database, observer the Orders.ShipAddress and Customers.Address, joined on the CustoemrID column in each table"
 Write-Output ""
 Write-Output "Additional tasks:"
 Write-Output "Review both rgsubset-options.json examples in ./helper_scripts, as well as this documentation about using options files:"

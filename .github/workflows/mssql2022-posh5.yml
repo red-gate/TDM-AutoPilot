@@ -7,12 +7,10 @@ on: # push, pr, nightly, and on demand, for all branches
   pull_request:  # Ensures PRs to main must pass the check
     branches:
       - release                      
-  # schedule:
-  #   - cron: '0 3 * * *' 
+  schedule:
+    - cron: '0 3 * * *' 
   workflow_dispatch:
-  workflow_call:  # This enables the workflow to be called from other workflows
-  repository_dispatch:
-    types: [daily-validation]  # Listens for dispatch events, which can trigger this workflow automatically on regular schedules
+
 jobs:
   run-autopilot-sql22-psh5:
     runs-on: windows-latest
@@ -141,10 +139,10 @@ jobs:
           $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ steps.createDc.outputs.dbUser }}, (ConvertTo-SecureString ${{ steps.createDc.outputs.dbPassword }} -AsPlainText -Force)
           
           # Validating rgsubset
-          $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database AutopilotDev -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
-          Write-Output "If rgsubset ran successfully, there should be 499 orders in the AutopilotDev database"
+          $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
+          Write-Output "If rgsubset ran successfully, there should be 12 orders in the Northwind_Subset database"
           Write-Output "Total Orders: $totalOrders"
-          if ($totalOrders -eq 498) {
+          if ($totalOrders -eq 12) {
             Write-Output "rgsubset ran successfully"
           } else {
             Write-Error "rgsubset did not run successfully"
@@ -152,10 +150,10 @@ jobs:
           }
 
           # Validating rganonymize
-          $customer570Address = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database AutopilotDev -Query "SELECT Address FROM Customers.Customer WHERE CustomerID = 570" -SqlCredential $SqlCredential).Address
-          Write-Output "If rganonymize ran successfully, Customer 570 should NOT be 55 Maromas St."
-          Write-Output "Address: $customer570Address"
-          if ($customer570Address -like "55 Maromas St.") {
+          $order10248City = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT ShipCity FROM dbo.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
+          Write-Output "If rganonymize ran successfully, order 10248 should NOT be Reims"
+          Write-Output "ShipCity: $order10248City"
+          if ($order10248City -like "Reims") {
             Write-Error "rganonymize did not run successfully"
             exit 1
           } else {

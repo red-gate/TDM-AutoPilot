@@ -47,72 +47,7 @@ Function Install-Dbatools {
 # Export the function
 Export-ModuleMember -Function Install-Dbatools
 
-Function New-SampleDatabasesAutopilotFull {
-    param (
-        [Parameter(Mandatory = $true)][boolean]$WinAuth,
-        [Parameter(Mandatory = $true)][string]$sqlInstance,
-        [Parameter(Mandatory = $true)][string]$sourceDb,
-        [Parameter(Mandatory = $true)][string]$targetDb,
-        [Parameter(Mandatory = $true)][string]$fullRestoreCreateScript,
-        [Parameter(Mandatory = $true)][string]$subsetCreateScript,
-        [PSCredential]$SqlCredential
-    )
-
-    # If exists, drop the source and target databases
-    Write-Verbose "  If exists, dropping the source and target databases"
-    if ($winAuth){
-        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb,'AutopilotBuild','AutopilotTest','AutopilotShadow', 'AutopilotCheck'
-    }
-    else {
-        $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb,'AutopilotBuild','AutopilotTest','AutopilotShadow', 'AutopilotCheck' -SqlCredential $SqlCredential
-    }
-
-    forEach ($db in $dbsToDelete.Name){
-        Write-Verbose "    Dropping database $db"
-        $sql = "ALTER DATABASE $db SET single_user WITH ROLLBACK IMMEDIATE; DROP DATABASE $db;"
-        Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlCredential $SqlCredential
-    }
-
-    # Create the fullRestore and subset databases
-    Write-Verbose "  Creating the fullRestore and subset databases"
-    New-DbaDatabase -SqlInstance $sqlInstance -Name $sourceDb, $targetDb, 'AutopilotBuild', 'AutopilotTest', 'AutopilotShadow', 'AutopilotCheck' -SqlCredential $SqlCredential | Out-Null
-    
-    Write-Verbose "    Creating the $sourceDb database objects and data"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $fullRestoreCreateScript -SqlCredential $SqlCredential | Out-Null
-    
-    Write-Verbose "    Creating the $targetDb database objects"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
-	
-	Write-Verbose "    Creating the AutopilotBuild database objects"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotBuild' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
-	
-	Write-Verbose "    Creating the 'AutopilotTest' database objects"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotTest' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
-	
-	Write-Verbose "    Creating the 'AutopilotShadow' database objects"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotShadow' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
-
-    Write-Verbose "    Creating the 'AutopilotShadow' database objects"
-    Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotCheck' -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
-    
-    Write-Verbose "  Validating that the databases have been created correctly"
-    $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
-    $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders    
-    
-    if ($totalFullRestoreOrders -ne 1000){
-        Write-Error "    There should be 1000 rows in $sourceDb, but there are $totalFullRestoreOrders."
-        return $false
-    }
-    if ($totalSubsetOrders -ne 0){
-        Write-Error "    There should be 0 rows in $targetDb, but there are $totalSubsetOrders."
-        return $false
-    }
-    return $true
-}
-# Export the function
-Export-ModuleMember -Function New-SampleDatabasesAutopilotFull
-
-Function New-SampleDatabasesAutopilot {
+Function New-SampleDatabases {
     param (
         [Parameter(Mandatory = $true)][boolean]$WinAuth,
         [Parameter(Mandatory = $true)][string]$sqlInstance,
@@ -149,11 +84,11 @@ Function New-SampleDatabasesAutopilot {
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -File $subsetCreateScript -SqlCredential $SqlCredential | Out-Null
     
     Write-Verbose "  Validating that the databases have been created correctly"
-    $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
-    $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders    
+    $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
+    $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders    
     
-    if ($totalFullRestoreOrders -ne 1000){
-        Write-Error "    There should be 1000 rows in $sourceDb, but there are $totalFullRestoreOrders."
+    if ($totalFullRestoreOrders -ne 830){
+        Write-Error "    There should be 830 rows in $sourceDb, but there are $totalFullRestoreOrders."
         return $false
     }
     if ($totalSubsetOrders -ne 0){
@@ -163,7 +98,7 @@ Function New-SampleDatabasesAutopilot {
     return $true
 }
 # Export the function
-Export-ModuleMember -Function New-SampleDatabasesAutopilot
+Export-ModuleMember -Function New-SampleDatabases
 
 Function Restore-StagingDatabasesFromBackup {
     param (

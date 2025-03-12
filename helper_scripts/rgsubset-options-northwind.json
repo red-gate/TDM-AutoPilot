@@ -1,0 +1,14 @@
+{
+  "jsonSchemaVersion": 1,
+  "startingTables": [
+    { 
+      "table":
+      {
+        "schema": "dbo",
+        "name": "Orders"
+      },
+      "filterClause": "OrderId < 10260"
+    }
+  ],
+  "includeTablesRowThreshold": 1
+}
