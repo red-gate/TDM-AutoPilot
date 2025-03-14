@@ -162,6 +162,3 @@ jobs:
           } else {
             Write-Output "rganonymize ran successfully"
           }
-          } else {
-            Write-Output "rganonymize ran successfully"
-          }
