@@ -130,8 +130,8 @@ jobs:
           Write-Output '  -sqlInstance ${{ steps.createDc.outputs.instance }}'
           Write-Output '  -sqlUser ${{ steps.createDc.outputs.dbUser }}'
           .\run-tdm-autopilot.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
-
-      - name: Validating results
+      
+      - name: Validating Results (Northwind Databases)
         shell: powershell
         if: ${{ always() }}
         run: |
@@ -161,3 +161,34 @@ jobs:
           } else {
             Write-Output "rganonymize ran successfully"
           }
+
+      # - name: Validating Results (Autopilot Databases)
+      #   shell: powershell
+      #   if: ${{ always() }}
+      #   run: |
+      #     import-module dbatools
+      #     Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
+      #     Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
+      #     $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ steps.createDc.outputs.dbUser }}, (ConvertTo-SecureString ${{ steps.createDc.outputs.dbPassword }} -AsPlainText -Force)
+          
+      #     # Validating rgsubset
+      #     $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database AutopilotDev -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
+      #     Write-Output "If rgsubset ran successfully, there should be 499 orders in the AutopilotDev database"
+      #     Write-Output "Total Orders: $totalOrders"
+      #     if ($totalOrders -eq 498) {
+      #       Write-Output "rgsubset ran successfully"
+      #     } else {
+      #       Write-Error "rgsubset did not run successfully"
+      #       exit 1
+      #     }
+
+      #     # Validating rganonymize
+      #     $customer570Address = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database AutopilotDev -Query "SELECT Address FROM Customers.Customer WHERE CustomerID = 570" -SqlCredential $SqlCredential).Address
+      #     Write-Output "If rganonymize ran successfully, Customer 570 should NOT be 55 Maromas St."
+      #     Write-Output "Address: $customer570Address"
+      #     if ($customer570Address -like "55 Maromas St.") {
+      #       Write-Error "rganonymize did not run successfully"
+      #       exit 1
+      #     } else {
+      #       Write-Output "rganonymize ran successfully"
+      #     }

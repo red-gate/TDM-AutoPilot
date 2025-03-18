@@ -2,39 +2,35 @@ param (
     $sqlInstance = "localhost",
     $sqlUser = "",
     $sqlPassword = "",
-    $output = "C:/temp/tdm-autopilot",
+    $output = "C:\temp\tdm-autopilot",
     $trustCert = $true,
     $backupPath = "",
     $databaseName = "Northwind",
     [switch]$autoContinue,
     [switch]$skipAuth,
+    [switch]$autopilotAllDatabases,
     [switch]$noRestore,
     [switch]$iAgreeToTheRedgateEula
 )
 
-# Userts must agree to the Redgate Eula, either by using the -iAgreeToTheRedgateEula parameter, or by responding to a prompt
-if (-not $iAgreeToTheRedgateEula){
-    if ($autoContinue){
-        Write-Error 'If using the -autoContinue parameter, the -iAgreeToTheRedgateEula parameter is also required.'
-        break
-    }
-    else {
-        $eulaResponse = Read-Host "Do you agree to the Redgate End User License Agreement (EULA)? (y/n)"
-        if ($eulaResponse -notlike "y"){
-            Write-output 'Response not like "y". Teminating script.'
-            break
-        }
-    }
+# Configuration
+if ($autopilotAllDatabases){
+    $databaseName = "Autopilot"
+    $sourceDb = "AutopilotProd"
+    $targetDb = "AutopilotDev"
+    $fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseFullRestore.sql"
+    $subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseSubset.sql"
+    $subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-autopilot.json"
+} else {
+    $sourceDb = "${databaseName}_FullRestore"
+    $targetDb = "${databaseName}_Subset"
+    $fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateNorthwindFullRestore.sql"
+    $subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateNorthwindSubset.sql"
+    $subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-northwind.json"
 }
 
-# Configuration
-$sourceDb = "${databaseName}_FullRestore"
-$targetDb = "${databaseName}_Subset"
-$fullRestoreCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindFullRestore.sql"
-$subsetCreateScript = "$PSScriptRoot/helper_scripts/CreateNorthwindSubset.sql"
-$installTdmClisScript = "$PSScriptRoot/helper_scripts/installTdmClis.ps1"
-$helperFunctions = "$PSScriptRoot/helper_scripts/helper-functions.psm1"
-$subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-northwind.json"
+$installTdmClisScript = "$PSScriptRoot\helper_scripts\installTdmClis.ps1"
+$helperFunctions = "$PSScriptRoot\helper_scripts\helper-functions.psm1"
 
 $winAuth = $true
 $sourceConnectionString = ""
@@ -67,6 +63,7 @@ Write-Output "- targetConnectionString:  $targetConnectionString"
 Write-Output "- output:                  $output"
 Write-Output "- trustCert:               $trustCert"
 Write-Output "- backupPath:              $backupPath"
+Write-Output "- autopilotAllDatabases:   $autopilotAllDatabases"
 Write-Output "- noRestore:               $noRestore"
 Write-Output ""
 Write-Output "Initial setup:"
@@ -80,6 +77,8 @@ import-module $helperFunctions
 $requiredFunctions = @(
     "Install-Dbatools",
     "New-SampleDatabases",
+    "New-SampleDatabasesAutopilot",
+    "New-SampleDatabasesAutopilotFull",
     "Restore-StagingDatabasesFromBackup"
 )
 # Testing that all the required functions are available
@@ -90,6 +89,23 @@ $requiredFunctions | ForEach-Object {
     }
     else {
         Write-Output "    $_ found."
+    }
+}
+
+# Userts must agree to the Redgate Eula, either by using the -iAgreeToTheRedgateEula parameter, or by responding to a prompt
+if (-not $iAgreeToTheRedgateEula){
+    if ($autoContinue){
+        Write-Error 'If using the -autoContinue parameter, the -iAgreeToTheRedgateEula parameter is also required.'
+        break
+    }
+    else {
+        do { $eulaResponse = Get-ValidatedInput -PromptMessage "Do you agree to the Redgate End User License Agreement (EULA)? (y/n)" -ErrorMessage "Do you agree to the Redgate End User License Agreement (EULA)? (y/n)"
+             $eulaResponse = $eulaResponse.ToUpper()
+            } until ($eulaResponse -match "^(Y|N)$")
+    if ($eulaResponse -notlike "y") {
+        Write-output 'Response not like "y". Teminating script.'
+        break
+        }
     }
 }
 
@@ -104,9 +120,23 @@ else {
     break
 }
 
-# Download/update rgsubset and rganonymize CLIs
-Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
-powershell -File  $installTdmClisScript 
+if (-not $autoContinue) {
+    do {
+        $tdmInstallResponse = Get-ValidatedInput -PromptMessage "Do you want to install the latest version of TDM Data Treatments? (y/n)" -ErrorMessage "Do you want to install the latest version of TDM Data Treatments? Please enter Y or N"
+        $tdmInstallResponse = $tdmInstallResponse.ToUpper()
+    } until ($tdmInstallResponse -match "^(Y|N)$")
+} else {
+    $tdmInstallResponse = "y"  # Auto-set response to "y" for CI/CD pipelines
+}
+
+if ($tdmInstallResponse -like "y"){
+    # Download/update rgsubset and rganonymize CLIs
+    Write-Output "  Ensuring the following Redgate Test Data Manager CLIs are installed and up to date: rgsubset, rganonymize"
+    powershell -File  $installTdmClisScript 
+}
+    if ($tdmInstallResponse -notlike "y"){
+        Write-output 'Skipping TDM Data Treatments Install Step'
+}
 
 # Refreshing the environment variables so that the new path is available
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -165,9 +195,22 @@ else {
         break
     }
   }
+  if ($autopilotAllDatabases) {
+    # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
+    # Used to restore ALL autopilot databases, rather than just two which is the default
+    Write-Output "  Building all sample Autopilot databases."
+    $dbCreateSuccessful = New-SampleDatabasesAutopilotFull -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
+    if ($dbCreateSuccessful){
+        Write-Output "    All Autopilot Databases successfully created."
+    }
+    else {
+        Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
+        break
+    }
+  }
   else {
     # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
-    Write-Output "  Building sample Northwind source and target databases."
+    Write-Output "  Building sample source and target databases."
     $dbCreateSuccessful = New-SampleDatabases -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
     if ($dbCreateSuccessful){
         Write-Output "    Source and target databases created successfully."
@@ -195,6 +238,28 @@ Write-Output "There should now be two databases on the $sqlInstance server: $sou
 Write-Output "$sourceDb should contain some data"
 if ($backupPath){
     Write-Output "$targetDb should be identical. In an ideal world, it would be schema identical, but empty of data."
+}
+if ($autopilotAllDatabases) {
+    Write-Output "$targetDb should have an identical schema, but no data"
+    Write-Output ""
+    Write-Output "For example, you could run the following script in your prefered IDE:"
+    Write-Output ""
+    Write-Output "  USE $sourceDb"
+    Write-Output "  --USE $targetDb -- Uncomment to run the same query on the target database"
+    Write-Output "  "
+    Write-Output "  SELECT COUNT (*) AS TotalOrders"
+    Write-Output "  FROM   Sales.Orders;"
+    Write-Output "  "
+    Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
+    Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
+    Write-Output "                  o.OrderDate AS 'o.OrderDate' ,"
+    Write-Output "                  o.Status AS 'o.Status' ,"
+    Write-Output "                  c.FirstName AS 'c.FirstName' ,"
+    Write-Output "                  c.LastName AS 'c.LastName',"
+    Write-Output "                  c.Address AS 'c.Address'"
+    Write-Output "  FROM     Customers.Customer c"
+    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
+    Write-Output "  ORDER BY o.OrderID ASC;"
 }
 else {
     Write-Output "$targetDb should have an identical schema, but no data"

@@ -1,0 +1,14 @@
+{
+  "jsonSchemaVersion": 1,
+  "startingTables": [
+    { 
+      "table":
+      {
+        "schema": "Customers",
+        "name": "Customer"
+      },
+      "filterClause": "CustomerID > 500"
+    }
+  ],
+  "includeTableRowsThreshold": 1
+}
