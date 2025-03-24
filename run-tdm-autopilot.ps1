@@ -2,35 +2,77 @@ param (
     $sqlInstance = "localhost",
     $sqlUser = "",
     $sqlPassword = "",
-    $output = "C:\temp\tdm-autopilot",
+    $output = "C:\temp\tdm-autopilot", # Temporary location to write Autopilot log files to
     $trustCert = $true,
-    $backupPath = "",
-    $databaseName = "Northwind",
-    [switch]$autoContinue,
-    [switch]$skipAuth,
-    [switch]$autopilotAllDatabases,
-    [switch]$noRestore,
+    $backupPath = "", # Optional - Pass in a backup file location to be used with Autopilot
+    $databaseName = "Autopilot", # Set to your preferred target database name
+    $sampleDatabase = "", # Set to either Northwind/Autopilot/Autopilot_Full/Backup or leave blank for the default 'Autopilot' option
+    [switch]$autoContinue, # Set to true to enable non-interactive mode (Valuable for pipeline automation)
+    [switch]$skipAuth, # Set to true to skip the CLI authentication steps
+    [switch]$noRestore, # Set to true to skip all database provisioning steps. Ensure Source and Target Database already present.
     [switch]$iAgreeToTheRedgateEula
 )
 
-# Configuration
-if ($autopilotAllDatabases){
+# Configuration block based on $sampleDatabase selection
+if ($sampleDatabase -eq 'Autopilot_Full') {
     $databaseName = "Autopilot"
-    $sourceDb = "AutopilotProd"
-    $targetDb = "AutopilotDev"
-    $fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseFullRestore.sql"
-    $subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateAutopilotDatabaseSubset.sql"
-    $subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-autopilot.json"
-} else {
+    $sourceDb = "AutopilotProd_FullRestore"
+    $targetDb = "Autopilot_Treated"
+    $schemaCreateScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseSchemaOnly.sql"
+    $productionDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseProductionData.sql"
+    $testDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseTestData.sql"
+    $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-autopilot.json"
+
+} elseif ($sampleDatabase -eq 'Autopilot') {
+    $databaseName = "Autopilot"
+    $sourceDb = "AutopilotProd_FullRestore"
+    $targetDb = "Autopilot_Treated"
+    $schemaCreateScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseSchemaOnly.sql"
+    $productionDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseProductionData.sql"
+    $testDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseTestData.sql"
+    $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-autopilot.json"
+
+} elseif ((-not $sampleDatabase -and -not [string]::IsNullOrWhiteSpace($backupPath)) -or ($sampleDatabase -eq 'backup')) {
+    # If backupPath is provided or sampleDatabase set to backup use Custom Backup Method
+    $databaseName = "Backup"
     $sourceDb = "${databaseName}_FullRestore"
     $targetDb = "${databaseName}_Subset"
-    $fullRestoreCreateScript = "$PSScriptRoot\helper_scripts\CreateNorthwindFullRestore.sql"
-    $subsetCreateScript = "$PSScriptRoot\helper_scripts\CreateNorthwindSubset.sql"
-    $subsetterOptionsFile = "$PSScriptRoot\helper_scripts\rgsubset-options-northwind.json"
+    $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-backup.json"
+
+    # Check if backupPath is already set
+    if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+        Write-Host "   Using backup path provided: $backupPath"
+    }
+
+    else {
+        # Prompt user to enter backup path
+        $backupPath = Read-Host "Please enter the full path to the backup file (.bak)"
+
+        # Remove surrounding quotes if user included them
+        $backupPath = $backupPath.Trim('"')
+        
+        if (-not (Test-Path $backupPath)) {
+            Write-Error "The path you entered does not exist. Please check the path and try again."
+            break
+        }
+        Write-Host "   Backup path set to: $backupPath"
+    }
+
+    Write-Host "   Custom source/target DBs will be: $sourceDb → $targetDb"
+
+} else {
+    # Default fallback behavior
+    $databaseName = "Autopilot"
+    $sourceDb = "AutopilotProd_FullRestore"
+    $targetDb = "Autopilot_Treated"
+    $schemaCreateScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseSchemaOnly.sql"
+    $productionDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseProductionData.sql"
+    $testDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseTestData.sql"
+    $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-autopilot.json"
 }
 
-$installTdmClisScript = "$PSScriptRoot\helper_scripts\installTdmClis.ps1"
-$helperFunctions = "$PSScriptRoot\helper_scripts\helper-functions.psm1"
+$installTdmClisScript = "$PSScriptRoot\Setup_Files\installTdmClis.ps1"
+$helperFunctions = "$PSScriptRoot\Setup_Files\helper-functions.psm1"
 
 $winAuth = $true
 $sourceConnectionString = ""
@@ -52,8 +94,18 @@ Write-Output "- sqlInstance:             $sqlInstance"
 Write-Output "- databaseName:            $databaseName"
 Write-Output "- sourceDb:                $sourceDb"
 Write-Output "- targetDb:                $targetDb"  
+if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+# Don't output any script paths if a backup is provided
+Write-Output "- backupPath:              $backupPath"
+}
+elseif ($sampleDatabase -eq 'Autopilot_Full' -or $sampleDatabase -eq 'Autopilot') {
+Write-Output "- schemaScript:            $schemaCreateScript"
+Write-Output "- InsertScript:            $productionDataInsertScript"
+}
+else {
 Write-Output "- fullRestoreCreateScript: $fullRestoreCreateScript"
 Write-Output "- subsetCreateScript:      $subsetCreateScript"
+}
 Write-Output "- installTdmClisScript:    $installTdmClisScript"
 Write-Output "- helperFunctions:         $helperFunctions"
 Write-Output "- subsetterOptionsFile:    $subsetterOptionsFile"
@@ -62,8 +114,7 @@ Write-Output "- sourceConnectionString:  $sourceConnectionString"
 Write-Output "- targetConnectionString:  $targetConnectionString"
 Write-Output "- output:                  $output"
 Write-Output "- trustCert:               $trustCert"
-Write-Output "- backupPath:              $backupPath"
-Write-Output "- autopilotAllDatabases:   $autopilotAllDatabases"
+Write-Output "- sampleDatabase:          $sampleDatabase"
 Write-Output "- noRestore:               $noRestore"
 Write-Output ""
 Write-Output "Initial setup:"
@@ -109,15 +160,44 @@ if (-not $iAgreeToTheRedgateEula){
     }
 }
 
-# Installing/importing dbatools
-Write-Output "  Installing dbatools"
-$dbatoolsInstalledSuccessfully = Install-Dbatools -autoContinue:$autoContinue -trustCert:$trustCert
-if ($dbatoolsInstalledSuccessfully){
-    Write-Output "    dbatools installed successfully"
+# Check if dbatools is installed
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Host ""
+    Write-Warning "The required module 'dbatools' is not currently installed."
+    Write-Host "It is needed to continue running this script."
+    Write-Host ""
+    Write-Host "Installing dbatools requires administrative privileges." -ForegroundColor Yellow
+    if ($autoContinue){
+        $installNow = "Y"
+    } else {
+    $installNow = Read-Host "Would you like to install it now? (Y/N)"
+    }
+
+    if ($installNow -match '^(Y|y)$') {
+        try {
+            # Attempt to install with elevated privileges
+            Install-Dbatools -autoContinue:$autoContinue -trustCert:$trustCert
+            Write-Host "dbatools has been installed successfully." -ForegroundColor Green
+        }
+        catch {
+            Write-Error "Failed to install dbatools. Please install it manually or run this script as Administrator."
+            exit 1
+        }
+    }
+    else {
+        Write-Warning "Skipping installation of dbatools. Please ensure it is installed before continuing."
+        Write-Host "You can install it manually by running:"
+        Write-Host "Install-Module dbatools -Scope CurrentUser -AllowClobber" -ForegroundColor Cyan
+        Write-Host ""
+        $continueAnyway = Read-Host "Do you want to continue anyway? (Y/N)"
+        if ($continueAnyway -notmatch '^(Y|y)$') {
+            Write-Host "Exiting setup. Please install dbatools and re-run the script."
+            exit 1
+        }
+    }
 }
 else {
-    Write-Error "    dbatools failed to install. Please review any errors above."
-    break
+    Write-Host "dbatools module is already installed." -ForegroundColor Green
 }
 
 if (-not $autoContinue) {
@@ -181,9 +261,7 @@ if ($noRestore){
     Write-Output "Please ensure that the source and target databases are already created and available on the $sqlInstance server."
     Write-Output "*********************************************************************************************************"
 }
-else {
-    # Building staging databases
-  if ($backupPath) {
+elseif ($backupPath) {
     # Using the Restore-StagingDatabasesFromBackup function in helper-functions.psm1 to build source and target databases from an existing backup
     Write-Output "  Building $sourceDb and $targetDb databases from backup file saved at $BackupPath."
     $dbCreateSuccessful = Restore-StagingDatabasesFromBackup -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -sourceBackupPath:$backupPath -SqlCredential:$SqlCredential
@@ -194,36 +272,50 @@ else {
         Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
         break
     }
-  }
-  if ($autopilotAllDatabases) {
+}
+elseif ($sampleDatabase -eq "Autopilot_Full") {
     # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
     # Used to restore ALL autopilot databases, rather than just two which is the default
-    Write-Output "  Building all sample Autopilot databases."
-    $dbCreateSuccessful = New-SampleDatabasesAutopilotFull -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
+    Write-Output "  Starting database creation process..."
+    New-SampleDatabasesAutopilotFull -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
     if ($dbCreateSuccessful){
-        Write-Output "    All Autopilot Databases successfully created."
+        Write-Host "All databases created and validated successfully." -ForegroundColor Green
     }
     else {
         Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
         break
     }
-  }
-  else {
+}
+elseif ($sampleDatabase -eq "Autopilot") {
     # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
-    Write-Output "  Building sample source and target databases."
-    $dbCreateSuccessful = New-SampleDatabases -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -fullRestoreCreateScript:$fullRestoreCreateScript -subsetCreateScript:$subsetCreateScript -SqlCredential:$SqlCredential
+    # Used to restore ALL autopilot databases, rather than just two which is the default
+    Write-Output "  Starting database creation process..."
+    New-SampleDatabasesAutopilot -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
     if ($dbCreateSuccessful){
-        Write-Output "    Source and target databases created successfully."
+        Write-Host "All databases created and validated successfully." -ForegroundColor Green
     }
     else {
         Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
         break
     }
-  }
+}
+else {
+    # Default to Autopilot databases
+    # Using the Build-SampleDatabases function in helper-functions.psm1, and provided sql create scripts, to build sample source and target databases
+    # Used to restore ALL autopilot databases, rather than just two which is the default
+    Write-Output "  Starting database creation process..."
+    New-SampleDatabasesAutopilot -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
+    if ($dbCreateSuccessful){
+        Write-Host "All databases created and validated successfully." -ForegroundColor Green
+    }
+    else {
+        Write-Error "    Error: Failed to create the source and target databases. Please review any errors above."
+        break
+    }
 }
 
 # Clean output directory
-Write-Output "  Cleaning the output directory at: $output"
+Write-Output "    Cleaning the output directory at: $output"
 if (Test-Path $output){
     Write-Output "    Recursively deleting the existing output directory, and any files from previous runs."
     Remove-Item -Recurse -Force $output | Out-Null
@@ -239,7 +331,7 @@ Write-Output "$sourceDb should contain some data"
 if ($backupPath){
     Write-Output "$targetDb should be identical. In an ideal world, it would be schema identical, but empty of data."
 }
-if ($autopilotAllDatabases) {
+else {
     Write-Output "$targetDb should have an identical schema, but no data"
     Write-Output ""
     Write-Output "For example, you could run the following script in your prefered IDE:"
@@ -252,36 +344,16 @@ if ($autopilotAllDatabases) {
     Write-Output "  "
     Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
     Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
-    Write-Output "                  o.OrderDate AS 'o.OrderDate' ,"
-    Write-Output "                  o.Status AS 'o.Status' ,"
-    Write-Output "                  c.FirstName AS 'c.FirstName' ,"
-    Write-Output "                  c.LastName AS 'c.LastName',"
-    Write-Output "                  c.Address AS 'c.Address'"
-    Write-Output "  FROM     Customers.Customer c"
-    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
-    Write-Output "  ORDER BY o.OrderID ASC;"
-}
-else {
-    Write-Output "$targetDb should have an identical schema, but no data"
-    Write-Output ""
-    Write-Output "For example, you could run the following script in your prefered IDE:"
-    Write-Output ""
-    Write-Output "  USE $sourceDb"
-    Write-Output "  --USE $targetDb -- Uncomment to run the same query on the target database"
-    Write-Output "  "
-    Write-Output "  SELECT COUNT (*) AS TotalOrders"
-    Write-Output "  FROM   dbo.Orders;"
-    Write-Output "  "
-    Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
-    Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
     Write-Output "                  o.ShipAddress AS 'o.ShipAddress' ,"
     Write-Output "                  o.ShipCity AS 'o.ShipCity' ,"
     Write-Output "                  c.Address AS 'c.Address' ,"
-    Write-Output "                  c.City AS 'c.ShipCity'"
-    Write-Output "  FROM     dbo.Customers c"
-    Write-Output "           JOIN dbo.Orders o ON o.CustomerID = c.CustomerID"
+    Write-Output "                  c.City AS 'c.ShipCity' ,"
+    Write-Output "                  c.ContactName AS 'c.ContactName'"
+    Write-Output "  FROM     Sales.Customers c"
+    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
     Write-Output "  ORDER BY o.OrderID ASC;"
 }
+
 Write-Output ""
 Write-Output "Next:"
 Write-Output "We will run the following rgsubset command to copy a subset of the data from $sourceDb to $targetDb."
@@ -307,7 +379,7 @@ function Prompt-Continue {
         while ($continueLoop) {
             $continue = Read-Host "Continue? (y/n)"
             switch ($continue.ToLower()) {
-                "y" { Write-Output 'User chose to continue.'; $continueLoop = $false }
+                "y" { Write-Verbose 'User chose to continue.'; $continueLoop = $false }
                 "n" { Write-Output 'User chose "n". Terminating script.'; exit }
                 default { Write-Output 'Invalid response. Please enter "y" or "n".' }
             }
@@ -322,10 +394,10 @@ Prompt-Continue
 Write-Output ""
 Write-Output "Running rgsubset to copy a subset of the data from $sourceDb to $targetDb."
 if ($backupPath){
-    rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --target-database-write-mode Overwrite
+    rgsubset run --database-engine=sqlserver --source-connection-string="$sourceConnectionString" --target-connection-string="$targetConnectionString" --target-database-write-mode Overwrite
 }
 else {
-    rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --options-file="$subsetterOptionsFile" --target-database-write-mode Overwrite
+    rgsubset run --database-engine="sqlserver" --source-connection-string="$sourceConnectionString" --target-connection-string="$targetConnectionString" --options-file="$subsetterOptionsFile" --target-database-write-mode=Overwrite
 }
 
 
@@ -393,10 +465,10 @@ Write-Output "The data in the $targetDb database should now be masked."
 Write-Output "Review the data in the $sourceDb and $targetDb databases. Are you happy with the way they have been subsetted and masked?"
 Write-Output "Things you may like to look out for:"
 Write-Output "  - Notes fields (e.g. Employees.Notes)"
-Write-Output "  - Dependencies (e.g. If using the sample Northwind database, observer the Orders.ShipAddress and Customers.Address, joined on the CustoemrID column in each table"
+Write-Output "  - Dependencies (e.g. If using the sample database, observe the Orders.ShipAddress and Customers.Address, joined on the CustomerID column in each table"
 Write-Output ""
 Write-Output "Additional tasks:"
-Write-Output "Review both rgsubset-options.json examples in ./helper_scripts, as well as this documentation about using options files:"
+Write-Output "Review both rgsubset-options.json examples in ./Setup_Files, as well as this documentation about using options files:"
 Write-Output "  https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/subsetting/subsetting-configuration/subsetting-configuration-file"
 Write-Output "To apply a more thorough mask on the notes fields, review this documentation, and configure this project to a Lorem Ipsum"
 Write-Output "  masking rule for any 'notes' fields:"

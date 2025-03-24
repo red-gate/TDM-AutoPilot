@@ -1,0 +1,42 @@
+{
+  "jsonSchemaVersion": 1,
+  "startingTables": [
+    { 
+      "table":
+      {
+        "schema": "",
+        "name": ""
+      },
+      "filterClause": ""
+    }
+  ],
+  "staticDataTables": [
+    {
+      "schema": "",
+      "name": ""
+    }
+  ],
+  "excludedTables": [
+    {
+      "schema": "",
+      "name": ""
+    }
+  ],
+  "manualRelationships": [
+    {
+      "sourceTable": 
+        { 
+          "schema": "", 
+          "name": ""
+        },
+      "sourceColumns": [ "" ],
+      "targetTable": 
+        { 
+          "schema": "", 
+          "name": "" 
+        },
+      "targetColumns": [ "" ]
+     }
+  ],
+  "includeTablesRowThreshold": 300
+}

@@ -1,0 +1,42 @@
+{
+  "jsonSchemaVersion": 1,
+  "startingTables": [
+    { 
+      "table":
+      {
+        "schema": "Sales",
+        "name": "Orders"
+      },
+      "filterClause": "OrderId < 10260"
+    }
+  ],
+  "staticDataTables": [
+    {
+      "schema": "Logistics",
+      "name": "Region"
+    }
+  ],
+  "excludedTables": [
+    {
+      "schema": "Sales",
+      "name": "OrderAuditLog"
+    }
+  ],
+  "manualRelationships": [
+    {
+      "sourceTable": 
+        { 
+          "schema": "Sales", 
+          "name": "Customers"
+        },
+      "sourceColumns": [ "CustomerID" ],
+      "targetTable": 
+        { 
+          "schema": "Sales", 
+          "name": "Orders" 
+        },
+      "targetColumns": [ "CustomerID" ]
+     }
+  ],
+  "includeTablesRowThreshold": 1
+}
