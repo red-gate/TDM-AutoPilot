@@ -184,10 +184,10 @@ jobs:
           }
 
           # Validating rganonymize
-          $customerHANARAddress = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Autopilot_Treated -Query "SELECT ShipAddress FROM Sales.Orders WHERE CustomerID = 'HANAR'" -SqlCredential $SqlCredential).Address
-          Write-Output "If rganonymize ran successfully, Customer HANAR should NOT be 'Rua do Paço, 67'"
-          Write-Output "Address: $customerHANARAddress"
-          if ($customerHANARAddress -like "Rua do Paço, 67") {
+          $order10248City = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Autopilot_Treated -Query "SELECT ShipCity FROM Sales.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
+          Write-Output "If rganonymize ran successfully, order 10248 should NOT be Reims"
+          Write-Output "ShipCity: $order10248City"
+          if ($order10248City -like "Reims") {
             Write-Error "rganonymize did not run successfully"
             exit 1
           } else {
