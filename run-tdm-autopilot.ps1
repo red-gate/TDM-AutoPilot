@@ -6,7 +6,7 @@ param (
     $trustCert = $true,
     $backupPath = "", # Optional - Pass in a backup file location to be used with Autopilot
     $databaseName = "Autopilot", # Set to your preferred target database name
-    $sampleDatabase = "", # Set to either Northwind/Autopilot/Autopilot_Full/Backup or leave blank for the default 'Autopilot' option
+    $sampleDatabase = "", # Set to either Autopilot/Autopilot_Full/Backup or leave blank for the default 'Autopilot' option
     [switch]$autoContinue, # Set to true to enable non-interactive mode (Valuable for pipeline automation)
     [switch]$skipAuth, # Set to true to skip the CLI authentication steps
     [switch]$noRestore, # Set to true to skip all database provisioning steps. Ensure Source and Target Database already present.
