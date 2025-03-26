@@ -4,39 +4,11 @@
     { 
       "table":
       {
-        "schema": "",
-        "name": ""
+        "schema": "Sales",
+        "name": "Orders"
       },
-      "filterClause": ""
+      "filterClause": "OrderId < 10260"
     }
   ],
-  "staticDataTables": [
-    {
-      "schema": "",
-      "name": ""
-    }
-  ],
-  "excludedTables": [
-    {
-      "schema": "",
-      "name": ""
-    }
-  ],
-  "manualRelationships": [
-    {
-      "sourceTable": 
-        { 
-          "schema": "", 
-          "name": ""
-        },
-      "sourceColumns": [ "" ],
-      "targetTable": 
-        { 
-          "schema": "", 
-          "name": "" 
-        },
-      "targetColumns": [ "" ]
-     }
-  ],
-  "includeTablesRowThreshold": 300
+  "includeTablesRowThreshold": 1
 }

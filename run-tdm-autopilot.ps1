@@ -1,16 +1,27 @@
 param (
-    $sqlInstance = "localhost",
-    $sqlUser = "",
-    $sqlPassword = "",
-    $output = "C:\temp\tdm-autopilot", # Temporary location to write Autopilot log files to
-    $trustCert = $true,
-    $backupPath = "", # Optional - Pass in a backup file location to be used with Autopilot
-    $databaseName = "Autopilot", # Set to your preferred target database name
-    $sampleDatabase = "", # Set to either Northwind/Autopilot/Autopilot_Full/Backup or leave blank for the default 'Autopilot' option
-    [switch]$autoContinue, # Set to true to enable non-interactive mode (Valuable for pipeline automation)
-    [switch]$skipAuth, # Set to true to skip the CLI authentication steps
-    [switch]$noRestore, # Set to true to skip all database provisioning steps. Ensure Source and Target Database already present.
-    [switch]$iAgreeToTheRedgateEula
+    $sqlInstance = "localhost", # The SQL Server instance to connect to (e.g., "MyServer\SQLInstance")
+    $sqlUser = "", # SQL Server username (leave blank for Windows Authentication)
+    $sqlPassword = "", # SQL Server password (only required if using SQL Authentication - Provide secure environment variable for added security)
+    $output = "C:\temp\tdm-autopilot", # Temporary directory for log files and outputs
+    $trustCert = $true, # Set to $true to trust self-signed SQL Server certificates
+    $backupPath = "", # Optional: Specify a .bak file path to restore the database from a backup
+    $databaseName = "Autopilot", # The target database name to be created or used
+    $sampleDatabase = "", # Choose a predefined sample database setup:
+                          # "Autopilot" - Standard Autopilot setup
+                          # "Autopilot_Full" - Full Autopilot with all staging databases
+                          # "Backup" - Use a backup file (requires -backupPath). User prompt will be given if backupPath is empty
+                          # Leave blank to default to "Autopilot"
+    $logLevel = "Information", # Logging verbosity level. Options:
+                               # "Debug" - Most detailed logs, useful for troubleshooting
+                               # "Error" - Logs only errors
+                               # "Fatal" - Logs only critical failures
+                               # "Information" - Standard logging (default)
+                               # "Verbose" - Extra logging details for debugging
+                               # "Warning" - Logs warnings and above
+    [switch]$autoContinue, # Enable non-interactive mode (useful for automated pipelines)
+    [switch]$skipAuth, # Skip authentication steps (Assumes user has pre-configured access. E.g offline permit)
+    [switch]$noRestore, # Skip database provisioning; assumes databases already exist
+    [switch]$iAgreeToTheRedgateEula # Required to acknowledge the Redgate EULA before execution
 )
 
 # Configuration block based on $sampleDatabase selection
@@ -84,8 +95,8 @@ if (($sqlUser -like "") -and ($sqlPassword -like "")){
 else {
     $winAuth = $false
     $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqlUser, (ConvertTo-SecureString $sqlPassword -AsPlainText -Force)
-    $sourceConnectionString = "server=$sqlInstance;database=$sourceDb;TrustServerCertificate=yes;User Id=$sqlUser;Password=$sqlPassword;"
-    $targetConnectionString = "server=$sqlInstance;database=$targetDb;TrustServerCertificate=yes;User Id=$sqlUser;Password=$sqlPassword;"
+    $sourceConnectionString = "server=$sqlInstance;database=$sourceDb;TrustServerCertificate=yes;UID=$sqlUser;Password=$sqlPassword;"
+    $targetConnectionString = "server=$sqlInstance;database=$targetDb;TrustServerCertificate=yes;UID=$sqlUser;Password=$sqlPassword;"
 }
 
 
@@ -118,6 +129,11 @@ Write-Output "- sampleDatabase:          $sampleDatabase"
 Write-Output "- noRestore:               $noRestore"
 Write-Output ""
 Write-Output "Initial setup:"
+
+# Detect whether running in Windows PowerShell (5.1) or PowerShell 7+ (pwsh)
+$isPwsh = $PSVersionTable.PSEdition -eq "Core"
+
+Write-Output "Detected PowerShell Edition: $($PSVersionTable.PSEdition)"
 
 # Unblocking all files in thi repo (typically required if code is downloaded as zip)
 Get-ChildItem -Path $PSScriptRoot -Recurse | Unblock-File
@@ -314,14 +330,28 @@ else {
     }
 }
 
-# Clean output directory
-Write-Output "    Cleaning the output directory at: $output"
-if (Test-Path $output){
-    Write-Output "    Recursively deleting the existing output directory, and any files from previous runs."
-    Remove-Item -Recurse -Force $output | Out-Null
+# Check if directory exists
+if (Test-Path $output) {
+    Write-Output "    Attempting to delete the existing output directory..."
+
+    try {
+        # Try to delete the directory
+        Remove-Item -Recurse -Force $output -ErrorAction Stop | Out-Null
+        Write-Output "Successfully cleaned the output directory." -ForegroundColor Green
+    } 
+    catch {
+        # If deletion fails, show a friendly warning
+        Write-Host "Skipping directory cleaning due to insufficient permissions. Consider manually cleaning '$output' if needed." -ForegroundColor Yellow
+    }
 }
-Write-Output "    Creating a clean output directory."
-New-Item -ItemType Directory -Path $output | Out-Null
+
+# Create temporary log directory if not already exists
+if (-not (Test-Path $output)) {
+    Write-Output "    Creating a clean output directory."
+    New-Item -ItemType Directory -Path $output | Out-Null
+} else {
+    Write-Output "    Directory already exists. Skipping creation."
+}
 
 Write-Output ""
 Write-Output "*********************************************************************************************************"
@@ -390,14 +420,93 @@ function Prompt-Continue {
 
 Prompt-Continue
 
-# running subset
+# Running Subset
 Write-Output ""
 Write-Output "Running rgsubset to copy a subset of the data from $sourceDb to $targetDb."
+
 if ($backupPath){
-    rgsubset run --database-engine=sqlserver --source-connection-string="$sourceConnectionString" --target-connection-string="$targetConnectionString" --target-database-write-mode Overwrite
+    if (-not $isPwsh) {
+        # Run rgsubset using standard CLI method (Windows PowerShell 5.1 or below)
+        & rgsubset run `
+            --database-engine=sqlserver `
+            --source-connection-string="$sourceConnectionString" `
+            --target-connection-string="$targetConnectionString" `
+            --options-file="$subsetterOptionsFile" `
+            --target-database-write-mode=Overwrite `
+            --log-level $logLevel | Tee-Object -Variable rgsubsetOutput
+
+        
+         # Check for failure
+        if ($LASTEXITCODE -ne 0 -or ($rgsubsetOutput -match "ERROR")) {
+            throw "rgsubset failed with exit code $LASTEXITCODE."
+        }
+    
+        Write-Host "rgsubset completed successfully" -ForegroundColor Green
+    }
+    else {
+        # Running in PowerShell 7+ (pwsh) → Use Argument List method
+        
+        $arguments = @(
+            'run'
+            '--database-engine=sqlserver'
+            "--source-connection-string=$sourceConnectionString"
+            "--target-connection-string=$targetConnectionString"
+            "--options-file=$subsetterOptionsFile"
+            '--target-database-write-mode=Overwrite'
+            "--log-level=$logLevel"
+        )
+
+        Start-Process -FilePath "rgsubset" -ArgumentList $arguments -NoNewWindow -Wait | Tee-Object -Variable rgsubsetOutput
+
+            # Check for failure
+        if ($LASTEXITCODE -ne 0 -or ($rgsubsetOutput -match "ERROR")) {
+            throw "rgsubset failed with exit code $LASTEXITCODE."
+        }
+
+        Write-Host "rgsubset completed successfully" -ForegroundColor Green
+    }
 }
 else {
-    rgsubset run --database-engine="sqlserver" --source-connection-string="$sourceConnectionString" --target-connection-string="$targetConnectionString" --options-file="$subsetterOptionsFile" --target-database-write-mode=Overwrite
+    if (-not $isPwsh) {
+        # Run rgsubset using standard CLI method (Windows PowerShell 5.1 or below)
+        & rgsubset run `
+            --database-engine=sqlserver `
+            --source-connection-string="$sourceConnectionString" `
+            --target-connection-string="$targetConnectionString" `
+            --options-file="$subsetterOptionsFile" `
+            --target-database-write-mode=Overwrite `
+            --log-level $logLevel | Tee-Object -Variable rgsubsetOutput
+
+        
+         # Check for failure
+        if ($LASTEXITCODE -ne 0 -or ($rgsubsetOutput -match "ERROR")) {
+            throw "rgsubset failed with exit code $LASTEXITCODE."
+        }
+    
+        Write-Host "rgsubset completed successfully" -ForegroundColor Green
+    }
+    else {
+        # Running in PowerShell 7+ (pwsh) → Use Argument List method
+        
+        $arguments = @(
+            'run'
+            '--database-engine=sqlserver'
+            "--source-connection-string=$sourceConnectionString"
+            "--target-connection-string=$targetConnectionString"
+            "--options-file=$subsetterOptionsFile"
+            '--target-database-write-mode=Overwrite'
+            "--log-level=$logLevel"
+        )
+
+        Start-Process -FilePath "rgsubset" -ArgumentList $arguments -NoNewWindow -Wait | Tee-Object -Variable rgsubsetOutput
+
+            # Check for failure
+        if ($LASTEXITCODE -ne 0 -or ($rgsubsetOutput -match "ERROR")) {
+            throw "rgsubset failed with exit code $LASTEXITCODE."
+        }
+
+        Write-Host "rgsubset completed successfully" -ForegroundColor Green
+    }
 }
 
 
@@ -415,7 +524,42 @@ Write-Output ""
 Prompt-Continue
 
 Write-Output "Creating a classification.json file in $output"
-rganonymize classify --database-engine SqlServer --connection-string=$targetConnectionString --classification-file "$output\classification.json" --output-all-columns
+if (-not $isPwsh) {
+        # Run rganonymize using standard CLI method
+        & rganonymize classify `
+        --database-engine "SqlServer" `
+        --connection-string "$targetConnectionString" `
+        --classification-file "$output\classification.json" `
+        --output-all-columns `
+        --log-level $logLevel | Tee-Object -Variable rganonymizeClassifyOutput
+
+        if ($LASTEXITCODE -ne 0 -or ($rganonymizeClassifyOutput -match "ERROR")) {
+            Write-Error "rganonymize (Classify) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
+    
+        Write-Host "rganonymize (Classify) completed successfully" -ForegroundColor Green
+    }
+    else {
+        $arguments = @(
+            'classify'
+            '--database-engine=sqlserver'
+            "--connection-string=$targetConnectionString"
+            "--classification-file=$output\classification.json"
+            '--output-all-columns'
+            "--log-level $logLevel"
+        )
+    
+        Start-Process -FilePath "rganonymize" -ArgumentList $arguments -NoNewWindow -Wait | Tee-Object -Variable rganonymizeClassifyOutput
+
+        if ($LASTEXITCODE -ne 0 -or ($rganonymizeClassifyOutput -match "ERROR")) {
+            Write-Error "rganonymize (Classify) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
+        
+        Write-Host "rganonymize (Classify) completed successfully" -ForegroundColor Green
+    }
+
 
 Write-Output ""
 Write-Output "*********************************************************************************************************"
@@ -436,7 +580,38 @@ Write-Output ""
 Prompt-Continue
 
 Write-Output "Creating a masking.json file based on contents of classification.json in $output"
-rganonymize map --classification-file="$output\classification.json" --masking-file="$output\masking.json"
+
+if (-not $isPwsh) {
+        # Run rganonymize using standard CLI method
+        & rganonymize map `
+        --classification-file "$output\classification.json" `
+        --masking-file="$output\masking.json" `
+        --log-level $logLevel | Tee-Object -Variable rganonymizeMapOutput
+
+        if ($LASTEXITCODE -ne 0 -or ($rganonymizeMapOutput -match "ERROR")) {
+            Write-Error "rganonymize (Mapping) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
+    
+        Write-Host "rganonymize (Mapping) completed successfully" -ForegroundColor Green
+    }
+    else {
+        $arguments = @(
+            'map'
+            "--masking-file=$output\masking.json"
+            "--classification-file=$output\classification.json"
+            "--log-level=$logLevel"
+        )
+    
+        Start-Process -FilePath "rganonymize" -ArgumentList $arguments -NoNewWindow -Wait | Tee-Object -Variable rganonymizeMapOutput
+
+        if ($LASTEXITCODE -ne 0 -or ($rganonymizeMapOutput -match "ERROR")) {
+            Write-Error "rganonymize (Mapping) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
+        Write-Host "rganonymize (Mapping) completed successfully" -ForegroundColor Green
+    }
+
 
 Write-Output ""
 Write-Output "*********************************************************************************************************"
@@ -456,7 +631,40 @@ Write-Output ""
 Prompt-Continue
 
 Write-Output "Masking target database, based on contents of masking.json file in $output"
-rganonymize mask --database-engine SqlServer --connection-string=$targetConnectionString --masking-file="$output\masking.json"
+if (-not $isPwsh) {
+        # Run rganonymize using standard CLI method
+        & rganonymize mask `
+        --database-engine SqlServer `
+        --connection-string "$targetConnectionString" `
+        --masking-file "$output\masking.json" `
+        --log-level $logLevel | Tee-Object -Variable rganonymizeMaskOutput
+
+        if ($LASTEXITCODE -ne 0 -or ($rganonymizeMaskOutput -match "ERROR")) {
+            Write-Error "rganonymize (Masking) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
+
+        Write-Host "rganonymize (Masking) completed successfully" -ForegroundColor Green
+    }
+    else {
+            $arguments = @(
+                'mask'
+                '--database-engine=sqlserver'
+                "--connection-string=$targetConnectionString"
+                "--masking-file=$output\masking.json"
+                "--log-level $logLevel"
+            )
+        
+            Start-Process -FilePath "rganonymize" -ArgumentList $arguments -NoNewWindow -Wait | Tee-Object -Variable rganonymizeMaskOutput
+
+            if ($LASTEXITCODE -ne 0 -or ($rganonymizeMaskOutput -match "ERROR")) {
+                Write-Error "rganonymize (Masking) failed with exit code $LASTEXITCODE."
+                exit $LASTEXITCODE
+            }
+
+            Write-Host "rganonymize (Masking) completed successfully" -ForegroundColor Green
+
+    }
 
 Write-Output ""
 Write-Output "*********************************************************************************************************"
