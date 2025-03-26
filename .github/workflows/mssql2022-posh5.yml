@@ -110,9 +110,9 @@ jobs:
           Write-Output "Data container created successfully and available at: $instance"
 
           # Set output values so that I can use them in subsequent steps
-          echo "::set-output name=dbUser::$dbUser"
-          echo "::set-output name=dbPassword::$dbPassword"
-          echo "::set-output name=instance::$instance"
+          echo "dbUser=$dbUser" >> $env:GITHUB_ENV
+          echo "dbPassword=$dbPassword" >> $env:GITHUB_ENV
+          echo "instance=$instance" >> $env:GITHUB_ENV
 
       - name: Run Autopilot for TDM in PowerShell 5
         shell: powershell
@@ -127,9 +127,9 @@ jobs:
             exit 1
           }
           Write-Output 'Running Autopilot for TDM...'
-          Write-Output '  -sqlInstance ${{ steps.createDc.outputs.instance }}'
-          Write-Output '  -sqlUser ${{ steps.createDc.outputs.dbUser }}'
-          .\run-tdm-autopilot.ps1 -sqlUser '${{ steps.createDc.outputs.dbUser }}' -sqlPassword '${{ steps.createDc.outputs.dbPassword }}' -sqlInstance '${{ steps.createDc.outputs.instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
+          Write-Output '  -sqlInstance ${{ env.Instance }}'
+          Write-Output '  -sqlUser ${{ env.dbUser }}'
+          .\run-tdm-autopilot.ps1 -sqlUser '${{ env.dbUser }}' -sqlPassword '${{ env.dbPassword }}' -sqlInstance '${{ env.Instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
       
       # - name: Validating Results (Northwind Databases)
       #   shell: powershell
@@ -138,10 +138,10 @@ jobs:
       #     import-module dbatools
       #     Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
       #     Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
-      #     $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ steps.createDc.outputs.dbUser }}, (ConvertTo-SecureString ${{ steps.createDc.outputs.dbPassword }} -AsPlainText -Force)
+      #     $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ env.dbUser }}, (ConvertTo-SecureString ${{ env.dbPassword }} -AsPlainText -Force)
           
       #     # Validating rgsubset
-      #     $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
+      #     $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ env.Instance }}' -Database Northwind_Subset -Query "SELECT COUNT (*) AS TotalOrders FROM dbo.Orders" -SqlCredential $SqlCredential).TotalOrders
       #     Write-Output "If rgsubset ran successfully, there should be 12 orders in the Northwind_Subset database"
       #     Write-Output "Total Orders: $totalOrders"
       #     if ($totalOrders -eq 12) {
@@ -152,7 +152,7 @@ jobs:
       #     }
 
       #     # Validating rganonymize
-      #     $order10248City = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Northwind_Subset -Query "SELECT ShipCity FROM dbo.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
+      #     $order10248City = (Invoke-DbaQuery -SqlInstance '${{ env.Instance }}' -Database Northwind_Subset -Query "SELECT ShipCity FROM dbo.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
       #     Write-Output "If rganonymize ran successfully, order 10248 should NOT be Reims"
       #     Write-Output "ShipCity: $order10248City"
       #     if ($order10248City -like "Reims") {
@@ -169,10 +169,10 @@ jobs:
           import-module dbatools
           Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
           Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
-          $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ steps.createDc.outputs.dbUser }}, (ConvertTo-SecureString ${{ steps.createDc.outputs.dbPassword }} -AsPlainText -Force)
+          $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ env.dbUser }}, (ConvertTo-SecureString ${{ env.dbPassword }} -AsPlainText -Force)
           
           # Validating rgsubset
-          $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Autopilot_Treated -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
+          $totalOrders = (Invoke-DbaQuery -SqlInstance '${{ env.Instance }}' -Database Autopilot_Treated -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
           Write-Output "If rgsubset ran successfully, there should be 12 orders in the Autopilot_Treated database"
           Write-Output "Total Orders: $totalOrders"
           if ($totalOrders -eq 12) {
@@ -183,7 +183,7 @@ jobs:
           }
 
           # Validating rganonymize
-          $order10248City = (Invoke-DbaQuery -SqlInstance '${{ steps.createDc.outputs.instance }}' -Database Autopilot_Treated -Query "SELECT ShipCity FROM Sales.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
+          $order10248City = (Invoke-DbaQuery -SqlInstance '${{ env.Instance }}' -Database Autopilot_Treated -Query "SELECT ShipCity FROM Sales.Orders WHERE OrderID = 10248" -SqlCredential $SqlCredential).ShipCity
           Write-Output "If rganonymize ran successfully, order 10248 should NOT be Reims"
           Write-Output "ShipCity: $order10248City"
           if ($order10248City -like "Reims") {
