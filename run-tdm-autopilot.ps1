@@ -24,6 +24,30 @@ param (
     [switch]$iAgreeToTheRedgateEula # Required to acknowledge the Redgate EULA before execution
 )
 
+$installTdmClisScript = "$PSScriptRoot\Setup_Files\installTdmClis.ps1"
+$helperFunctions = "$PSScriptRoot\Setup_Files\helper-functions.psm1"
+
+# Importing helper functions
+Write-Output "  Importing helper functions"
+import-module $helperFunctions
+$requiredFunctions = @(
+    "Install-Dbatools",
+    "New-SampleDatabases",
+    "New-SampleDatabasesAutopilot",
+    "New-SampleDatabasesAutopilotFull",
+    "Restore-StagingDatabasesFromBackup"
+)
+# Testing that all the required functions are available
+$requiredFunctions | ForEach-Object {
+    if (-not (Get-Command $_ -ErrorAction SilentlyContinue)){
+        Write-Error "  Error: Required function $_ not found. Please review any errors above."
+        exit
+    }
+    else {
+        Write-Output "    $_ found."
+    }
+}
+
 # Configuration block based on $sampleDatabase selection
 if ($sampleDatabase -eq 'Autopilot_Full') {
     $databaseName = "Autopilot"
@@ -57,10 +81,14 @@ if ($sampleDatabase -eq 'Autopilot_Full') {
 
     else {
         # Prompt user to enter backup path
-        $backupPath = Read-Host "Please enter the full path to the backup file (.bak)"
-
-        # Remove surrounding quotes if user included them
-        $backupPath = $backupPath.Trim('"')
+        do {
+            $backupPath = Get-ValidatedInput `
+                -PromptMessage "Please enter the full path to the backup file (.bak)" `
+                -ErrorMessage "Please enter a valid path to a .bak file"
+        
+            $backupPath = $backupPath.Trim('"') # Remove accidental quotes
+        
+        } until ($backupPath -match '\.bak$' -and (Test-Path $backupPath))
         
         if (-not (Test-Path $backupPath)) {
             Write-Error "The path you entered does not exist. Please check the path and try again."
@@ -81,9 +109,6 @@ if ($sampleDatabase -eq 'Autopilot_Full') {
     $testDataInsertScript = "$PSScriptRoot\Setup_Files\Sample_Database_Scripts\CreateAutopilotDatabaseTestData.sql"
     $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-autopilot.json"
 }
-
-$installTdmClisScript = "$PSScriptRoot\Setup_Files\installTdmClis.ps1"
-$helperFunctions = "$PSScriptRoot\Setup_Files\helper-functions.psm1"
 
 $winAuth = $true
 $sourceConnectionString = ""
@@ -137,27 +162,6 @@ Write-Output "Detected PowerShell Edition: $($PSVersionTable.PSEdition)"
 
 # Unblocking all files in thi repo (typically required if code is downloaded as zip)
 Get-ChildItem -Path $PSScriptRoot -Recurse | Unblock-File
-
-# Importing helper functions
-Write-Output "  Importing helper functions"
-import-module $helperFunctions
-$requiredFunctions = @(
-    "Install-Dbatools",
-    "New-SampleDatabases",
-    "New-SampleDatabasesAutopilot",
-    "New-SampleDatabasesAutopilotFull",
-    "Restore-StagingDatabasesFromBackup"
-)
-# Testing that all the required functions are available
-$requiredFunctions | ForEach-Object {
-    if (-not (Get-Command $_ -ErrorAction SilentlyContinue)){
-        Write-Error "  Error: Required function $_ not found. Please review any errors above."
-        exit
-    }
-    else {
-        Write-Output "    $_ found."
-    }
-}
 
 # Userts must agree to the Redgate Eula, either by using the -iAgreeToTheRedgateEula parameter, or by responding to a prompt
 if (-not $iAgreeToTheRedgateEula){
@@ -337,7 +341,7 @@ if (Test-Path $output) {
     try {
         # Try to delete the directory
         Remove-Item -Recurse -Force $output -ErrorAction Stop | Out-Null
-        Write-Output "Successfully cleaned the output directory." -ForegroundColor Green
+        Write-Host "Successfully cleaned the output directory." -ForegroundColor Green
     } 
     catch {
         # If deletion fails, show a friendly warning
@@ -359,66 +363,54 @@ Write-Output "Observe:"
 Write-Output "There should now be two databases on the $sqlInstance server: $sourceDb and $targetDb"
 Write-Output "$sourceDb should contain some data"
 if ($backupPath){
-    Write-Output "$targetDb should be identical. In an ideal world, it would be schema identical, but empty of data."
+    Write-Host "$targetDb should be identical. In an ideal world, it would be schema identical, but empty of data."
 }
 else {
-    Write-Output "$targetDb should have an identical schema, but no data"
-    Write-Output ""
-    Write-Output "For example, you could run the following script in your prefered IDE:"
-    Write-Output ""
-    Write-Output "  USE $sourceDb"
-    Write-Output "  --USE $targetDb -- Uncomment to run the same query on the target database"
-    Write-Output "  "
-    Write-Output "  SELECT COUNT (*) AS TotalOrders"
-    Write-Output "  FROM   Sales.Orders;"
-    Write-Output "  "
-    Write-Output "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ,"
-    Write-Output "                  o.CustomerID AS 'o.CustomerID' ,"
-    Write-Output "                  o.ShipAddress AS 'o.ShipAddress' ,"
-    Write-Output "                  o.ShipCity AS 'o.ShipCity' ,"
-    Write-Output "                  c.Address AS 'c.Address' ,"
-    Write-Output "                  c.City AS 'c.ShipCity' ,"
-    Write-Output "                  c.ContactName AS 'c.ContactName'"
-    Write-Output "  FROM     Sales.Customers c"
-    Write-Output "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID"
-    Write-Output "  ORDER BY o.OrderID ASC;"
+    Write-Host "$targetDb should have an identical schema, but no data"
+    Write-Host ""
+    Write-Host "For example, you could run the following script in your prefered IDE:"
+    Write-Host ""
+    Write-Host "  USE $sourceDb" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  --USE $targetDb -- Uncomment to run the same query on the target database" -ForegroundColor Blue  -BackgroundColor Black
+    Write-Host "  "
+    Write-Host "  SELECT COUNT (*) AS TotalOrders" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  FROM   Sales.Orders;" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  "
+    Write-Host "  SELECT   TOP 20 o.OrderID AS 'o.OrderId' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  o.CustomerID AS 'o.CustomerID' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  o.ShipAddress AS 'o.ShipAddress' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  o.ShipCity AS 'o.ShipCity' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  c.Address AS 'c.Address' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  c.City AS 'c.ShipCity' ," -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "                  c.ContactName AS 'c.ContactName'" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  FROM     Sales.Customers c" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "           JOIN Sales.Orders o ON o.CustomerID = c.CustomerID" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  ORDER BY o.OrderID ASC;" -ForegroundColor Blue  -BackgroundColor Black 
 }
 
 Write-Output ""
 Write-Output "Next:"
 Write-Output "We will run the following rgsubset command to copy a subset of the data from $sourceDb to $targetDb."
 if ($backupPath){
-    Write-Output "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --target-database-write-mode Overwrite"
+    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
 }
 else {
-    Write-Output "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --options-file `"$subsetterOptionsFile`" --target-database-write-mode Overwrite"
-    Write-Output "The subset will include data from the starting table, based on the options set here: $subsetterOptionsFile."
+    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --options-file `"$subsetterOptionsFile`" --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "The subset will include data from the starting table, based on the options set here: $subsetterOptionsFile."
 }
 Write-Output "*********************************************************************************************************"
 Write-Output ""
 
 # Creating the function for Y/N prompt
-
-function Prompt-Continue {
-
-    if ($autoContinue) {
-        Write-Output 'Auto-continue mode enabled. Proceeding without user input.'
-    } else {
-        $continueLoop = $true
-
-        while ($continueLoop) {
-            $continue = Read-Host "Continue? (y/n)"
-            switch ($continue.ToLower()) {
-                "y" { Write-Verbose 'User chose to continue.'; $continueLoop = $false }
-                "n" { Write-Output 'User chose "n". Terminating script.'; exit }
-                default { Write-Output 'Invalid response. Please enter "y" or "n".' }
-            }
-        }
+if (-not $autoContinue) {
+    do { $continueSubset = Get-ValidatedInput -PromptMessage "Would you like to continue? (y/n)" -ErrorMessage "Would you like to continue? (y/n)"
+    $continueSubset = $continueSubset.ToUpper()
+        } until ($continueSubset -match "^(Y|N)$")
+    if ($continueSubset -notlike "y") {
+        Write-Host 'Response not like "y". Teminating script.' -ForegroundColor Red
+        break
     }
 }
-
-
-Prompt-Continue
 
 # Running Subset
 Write-Output ""
@@ -431,7 +423,6 @@ if ($backupPath){
             --database-engine=sqlserver `
             --source-connection-string="$sourceConnectionString" `
             --target-connection-string="$targetConnectionString" `
-            --options-file="$subsetterOptionsFile" `
             --target-database-write-mode=Overwrite `
             --log-level $logLevel | Tee-Object -Variable rgsubsetOutput
 
@@ -451,7 +442,6 @@ if ($backupPath){
             '--database-engine=sqlserver'
             "--source-connection-string=$sourceConnectionString"
             "--target-connection-string=$targetConnectionString"
-            "--options-file=$subsetterOptionsFile"
             '--target-database-write-mode=Overwrite'
             "--log-level=$logLevel"
         )
@@ -510,18 +500,27 @@ else {
 }
 
 
-Write-Output ""
-Write-Output "*********************************************************************************************************"
-Write-Output "Observe:"
-Write-Output "$targetDb should contain a subset of the data from $sourceDb."
-Write-Output ""
-Write-Output "Next:"
-Write-Output "We will run rganonymize classify to create a classification.json file, documenting the location of any PII:"
-Write-Output "  rganonymize classify --database-engine SqlServer --connection-string $targetConnectionString --classification-file `"$output\classification.json`" --output-all-columns"
-Write-Output "*********************************************************************************************************"
-Write-Output ""
+Write-Host ""
+Write-Host "*********************************************************************************************************"
+Write-Host "Observe:"
+Write-Host "$targetDb should contain a subset of the data from $sourceDb."
+Write-Host ""
+Write-Host "Next:"
+Write-Host "We will run rganonymize classify to create a classification.json file, documenting the location of any PII:"
+Write-Host "  rganonymize classify --database-engine SqlServer --connection-string $targetConnectionString --classification-file `"$output\classification.json`" --output-all-columns" -ForegroundColor Blue  -BackgroundColor Black 
+Write-Host "*********************************************************************************************************"
+Write-Host ""
 
-Prompt-Continue
+# Creating the function for Y/N prompt
+if (-not $autoContinue) {
+    do { $continueClassify = Get-ValidatedInput -PromptMessage "Would you like to continue? (y/n)" -ErrorMessage "Would you like to continue? (y/n)"
+    $continueClassify = $continueClassify.ToUpper()
+        } until ($continueClassify -match "^(Y|N)$")
+    if ($continueClassify -notlike "y") {
+        Write-Host 'Response not like "y". Teminating script.' -ForegroundColor Red
+        break
+    }
+}
 
 Write-Output "Creating a classification.json file in $output"
 if (-not $isPwsh) {
@@ -561,23 +560,32 @@ if (-not $isPwsh) {
     }
 
 
-Write-Output ""
-Write-Output "*********************************************************************************************************"
-Write-Output "Observe:"
-Write-Output "Review the classification.json file save at: $output"
-Write-Output "This file documents any PII that has been found automatically in the $targetDb database."
-Write-Output "You can tweak this file as necessary and keep it in source control to inform future masking runs."
-Write-Output "You could even create CI builds that cross reference this file against your database source code,"
-Write-Output "  to ensure developers always add appropriate classifications for new columns before they get"
-Write-Output "  deployed to production."
-Write-Output ""
-Write-Output "Next:"
-Write-Output "We will run the rganonymize map command to create a masking.json file, defining how the PII will be masked:"
-Write-Output "  rganonymize map --classification-file `"$output\classification.json`" --masking-file `"$output\masking.json`""
-Write-Output "*********************************************************************************************************"
-Write-Output ""
+Write-Host ""
+Write-Host "*********************************************************************************************************"
+Write-Host "Observe:"
+Write-Host "Review the classification.json file save at: $output"
+Write-Host "This file documents any PII that has been found automatically in the $targetDb database."
+Write-Host "You can tweak this file as necessary and keep it in source control to inform future masking runs."
+Write-Host "You could even create CI builds that cross reference this file against your database source code,"
+Write-Host "  to ensure developers always add appropriate classifications for new columns before they get"
+Write-Host "  deployed to production."
+Write-Host ""
+Write-Host "Next:"
+Write-Host "We will run the rganonymize map command to create a masking.json file, defining how the PII will be masked:"
+Write-Host "  rganonymize map --classification-file `"$output\classification.json`" --masking-file `"$output\masking.json`"" -ForegroundColor Blue  -BackgroundColor Black 
+Write-Host "*********************************************************************************************************"
+Write-Host ""
 
-Prompt-Continue
+# Creating the function for Y/N prompt
+if (-not $autoContinue) {
+    do { $continueMap = Get-ValidatedInput -PromptMessage "Would you like to continue? (y/n)" -ErrorMessage "Would you like to continue? (y/n)"
+    $continueMap = $continueMap.ToUpper()
+        } until ($continueMap -match "^(Y|N)$")
+    if ($continueMap -notlike "y") {
+        Write-Host 'Response not like "y". Teminating script.' -ForegroundColor Red
+        break
+    }
+}
 
 Write-Output "Creating a masking.json file based on contents of classification.json in $output"
 
@@ -613,22 +621,31 @@ if (-not $isPwsh) {
     }
 
 
-Write-Output ""
-Write-Output "*********************************************************************************************************"
-Write-Output "Observe:"
-Write-Output "Review the masking.json file save at: $output"
-Write-Output "This file defines how the PII found in the $targetDb database will be masked."
-Write-Output "You can save this in source control, and set up an automated masking job to"
-Write-Output "  create a fresh masked copy, with the latest data, on a nightly or weekly"
-Write-Output "  basis, or at an appropriate point in your sprint/release cycle."
-Write-Output ""
-Write-Output "Next:"
-Write-Output "We will run the rganonymize mask command to mask the PII in ${targetDb}:"
-Write-Output "  rganonymize mask --database-engine SqlServer --connection-string $targetConnectionString --masking-file `"$output\masking.json`""
-Write-Output "*********************************************************************************************************"
-Write-Output ""
+Write-Host ""
+Write-Host "*********************************************************************************************************"
+Write-Host "Observe:"
+Write-Host "Review the masking.json file save at: $output"
+Write-Host "This file defines how the PII found in the $targetDb database will be masked."
+Write-Host "You can save this in source control, and set up an automated masking job to"
+Write-Host "  create a fresh masked copy, with the latest data, on a nightly or weekly"
+Write-Host "  basis, or at an appropriate point in your sprint/release cycle."
+Write-Host ""
+Write-Host "Next:"
+Write-Host "We will run the rganonymize mask command to mask the PII in ${targetDb}:"
+Write-Host "  rganonymize mask --database-engine SqlServer --connection-string $targetConnectionString --masking-file `"$output\masking.json`"" -ForegroundColor Blue  -BackgroundColor Black 
+Write-Host "*********************************************************************************************************"
+Write-Host ""
 
-Prompt-Continue
+# Creating the function for Y/N prompt
+if (-not $autoContinue) {
+    do { $continueMask = Get-ValidatedInput -PromptMessage "Would you like to continue? (y/n)" -ErrorMessage "Would you like to continue? (y/n)"
+    $continueMask = $continueMask.ToUpper()
+        } until ($continueMask -match "^(Y|N)$")
+    if ($continueMask -notlike "y") {
+        Write-Host 'Response not like "y". Teminating script.' -ForegroundColor Red
+        break
+    }
+}
 
 Write-Output "Masking target database, based on contents of masking.json file in $output"
 if (-not $isPwsh) {
@@ -666,38 +683,38 @@ if (-not $isPwsh) {
 
     }
 
-Write-Output ""
-Write-Output "*********************************************************************************************************"
-Write-Output "Observe:"
-Write-Output "The data in the $targetDb database should now be masked."
-Write-Output "Review the data in the $sourceDb and $targetDb databases. Are you happy with the way they have been subsetted and masked?"
-Write-Output "Things you may like to look out for:"
-Write-Output "  - Notes fields (e.g. Employees.Notes)"
-Write-Output "  - Dependencies (e.g. If using the sample database, observe the Orders.ShipAddress and Customers.Address, joined on the CustomerID column in each table"
-Write-Output ""
-Write-Output "Additional tasks:"
-Write-Output "Review both rgsubset-options.json examples in ./Setup_Files, as well as this documentation about using options files:"
-Write-Output "  https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/subsetting/subsetting-configuration/subsetting-configuration-file"
-Write-Output "To apply a more thorough mask on the notes fields, review this documentation, and configure this project to a Lorem Ipsum"
-Write-Output "  masking rule for any 'notes' fields:"
-Write-Output "  - Default classifications and datasets:"
-Write-Output "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/default-classifications-and-datasets"
-Write-Output "  - Applying custom classification rules:"
-Write-Output "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/custom-configuration/classification-rules"
-Write-Output "  - Using different or custom data sets:"
-Write-Output "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/custom-configuration/using-different-or-custom-datasets"
-Write-Output ""
-Write-Output "Once you have verified that all the PII has been removed, you can backup this version of"
-Write-output "  the database, and share it with your developers for dev/test purposes."
-Write-Output ""
-Write-Output "**************************************   FINISHED!   **************************************"
-Write-Output ""
-Write-Output "CONGRATULATIONS!"
-Write-Output "You've completed a minimal viable Test Data Manager proof of concept."
-Write-Output "Next, review the following resources:"
-Write-Output "  - Documentation:  https://documentation.red-gate.com/testdatamanager/command-line-interface-cli"
-Write-Output "  - Training:       https://www.red-gate.com/hub/university/courses/test-data-management/cloning/overview/introduction-to-tdm"
-Write-Output "Can you subset and mask one of your own databases?"
-Write-Output ""
-Write-Output "Want to learn more? If you have a Redgate account manager, they can help you get started."
-Write-Output "Otherwise, email us, and let's start a conversation: sales@red-gate.com"
+Write-Host ""
+Write-Host "*********************************************************************************************************"
+Write-Host "Observe:"
+Write-Host "The data in the $targetDb database should now be masked."
+Write-Host "Review the data in the $sourceDb and $targetDb databases. Are you happy with the way they have been subsetted and masked?"
+Write-Host "Things you may like to look out for:"
+Write-Host "  - Notes fields (e.g. Employees.Notes)"
+Write-Host "  - Dependencies (e.g. If using the sample database, observe the Orders.ShipAddress and Customers.Address, joined on the CustomerID column in each table"
+Write-Host ""
+Write-Host "Additional tasks:"
+Write-Host "Review both rgsubset-options.json examples in ./Setup_Files, as well as this documentation about using options files:"
+Write-Host "  https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/subsetting/subsetting-configuration/subsetting-configuration-file"
+Write-Host "To apply a more thorough mask on the notes fields, review this documentation, and configure this project to a Lorem Ipsum"
+Write-Host "  masking rule for any 'notes' fields:"
+Write-Host "  - Default classifications and datasets:"
+Write-Host "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/default-classifications-and-datasets"
+Write-Host "  - Applying custom classification rules:"
+Write-Host "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/custom-configuration/classification-rules"
+Write-Host "  - Using different or custom data sets:"
+Write-Host "    https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization/custom-configuration/using-different-or-custom-datasets"
+Write-Host ""
+Write-Host "Once you have verified that all the PII has been removed, you can backup this version of"
+Write-Host "  the database, and share it with your developers for dev/test purposes."
+Write-Host ""
+Write-Host "**************************************   FINISHED!   **************************************"
+Write-Host ""
+Write-Host "CONGRATULATIONS!"
+Write-Host "You've completed a minimal viable Test Data Manager proof of concept."
+Write-Host "Next, review the following resources:"
+Write-Host "  - Documentation:  https://documentation.red-gate.com/testdatamanager/command-line-interface-cli"
+Write-Host "  - Training:       https://www.red-gate.com/hub/university/courses/test-data-management/cloning/overview/introduction-to-tdm"
+Write-Host "Can you subset and mask one of your own databases?"
+Write-Host ""
+Write-Host "Want to learn more? If you have a Redgate account manager, they can help you get started."
+Write-Host "Otherwise, email us, and let's start a conversation: sales@red-gate.com"
