@@ -13,7 +13,7 @@ set /p runAsAdmin=Do you want to run PowerShell as administrator? - Recommended 
 set "runAsAdmin=%runAsAdmin:~0,1%"
 
 :: Build the PowerShell argument string
-set "ARG_STRING=-NoProfile -NoExit -ExecutionPolicy Bypass -File \"%SCRIPT_PATH%\" -skipAuth -sampleDatabase Backup"
+set "ARG_STRING=-NoProfile -NoExit -ExecutionPolicy Bypass -File \"%SCRIPT_PATH%\" -sampleDatabase Backup"
 
 if /I "%runAsAdmin%"=="Y" (
     powershell -NoProfile -Command ^
