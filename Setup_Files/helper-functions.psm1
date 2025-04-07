@@ -6,13 +6,13 @@ Function Install-Dbatools {
     # Installing and importing dbatools
     if (Get-InstalledModule | Where-Object {$_.Name -like "dbatools"}){
         # dbatools already installed
-        Write-Verbose "  dbatools PowerShell Module is installed."
+        Write-Host "  dbatools PowerShell Module is installed." -ForegroundColor Green
         return $true
     }
     else {
         # dbatools not installed yet
-        Write-Verbose "  dbatools PowerShell Module is not installed"
-        Write-Verbose "    Installing dbatools (requires admin privileges)."
+        Write-Host "  dbatools PowerShell Module is not installed" -ForegroundColor DarkCyan
+        Write-Host "    Installing dbatools (requires admin privileges)." -ForegroundColor DarkCyan
 
         $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
         $runningAsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -28,17 +28,17 @@ Function Install-Dbatools {
         }
         
     }
-    Write-Verbose "  Importing dbatools PowerShell module."
+    Write-Host "  Importing dbatools PowerShell module." -ForegroundColor DarkCyan
     import-module dbatools
 
     if ($trustCert){
         Write-Warning "Note: For convenience, trustCert is set to true. This is not best practice. For more information about a more secure way to manage encryption/certificates, see this post by Chrissy LeMaire: https://blog.netnerds.net/2023/03/new-defaults-for-sql-server-connections-encryption-trust-certificate/"
     }
-    if ($trustCert){
+    if ($trustCert -ne $true){
         # Updating the dbatools configuration for this session only to trust server certificates and not encrypt connections
         #   Note: This is not best practice. For more information about a more secure way to manage encyption/certificates, see this post by Chrissy LeMaire:
         #   https://blog.netnerds.net/2023/03/new-defaults-for-sql-server-connections-encryption-trust-certificate/
-        Write-Verbose "    Updating dbatools configuration (for this session only) to trust server certificates, and not to encrypt connections."
+        Write-Host "    Updating dbatools configuration (for this session only) to trust server certificates, and not to encrypt connections." -ForegroundColor DarkCyan
         Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
         Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
     }
@@ -113,7 +113,7 @@ Function New-SampleDatabasesAutopilotFull {
     )
 
     # If exists, drop the source and target databases
-    Write-Verbose "  If exists, dropping the source and target databases"
+    Write-Host "  If exists, dropping the source and target databases" -ForegroundColor DarkCyan
     if ($winAuth){
         $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb,'AutopilotBuild','AutopilotDev','AutopilotTest','AutopilotProd','AutopilotShadow', 'AutopilotCheck'
     }
@@ -128,29 +128,29 @@ Function New-SampleDatabasesAutopilotFull {
     }
 
     # Create the fullRestore and subset databases
-    Write-Host "  Creating the empty Autopilot Databases"
+    Write-Host "  Creating the empty Autopilot Databases" -ForegroundColor DarkCyan
     New-DbaDatabase -SqlInstance $sqlInstance -Name $sourceDb, $targetDb, 'AutopilotBuild', 'AutopilotDev', 'AutopilotTest', 'AutopilotProd', 'AutopilotShadow', 'AutopilotCheck' -SqlCredential $SqlCredential | Out-Null
     
-    Write-Host "    Building up the $sourceDb database"
+    Write-Host "    Building up the $sourceDb database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $productionDataInsertScript -SqlCredential $SqlCredential | Out-Null
 
-    Write-Host "    Building up the AutopilotProd database"
+    Write-Host "    Building up the AutopilotProd database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotProd' -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotProd' -File $productionDataInsertScript -SqlCredential $SqlCredential | Out-Null
     
-    Write-Host "    Building up the $targetDb database"
+    Write-Host "    Building up the $targetDb database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
 	
-    Write-Host "    Building up the AutopilotDev database"
+    Write-Host "    Building up the AutopilotDev database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotDev' -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotDev' -File $testDataInsertScript -SqlCredential $SqlCredential | Out-Null
 	
-	Write-Host "    Building up the AutopilotTest database"
+	Write-Host "    Building up the AutopilotTest database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotTest' -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database 'AutopilotTest' -File $testDataInsertScript -SqlCredential $SqlCredential | Out-Null
     
-    Write-Host "  Validating that the databases have been created correctly"
+    Write-Host "  Validating that the databases have been created correctly" -ForegroundColor DarkCyan
     $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
     $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders    
     
@@ -180,7 +180,7 @@ Function New-SampleDatabasesAutopilot {
     )
 
     # If exists, drop the source and target databases
-    Write-Verbose "  If exists, dropping the source and target databases"
+    Write-Host "  If exists, dropping the source and target databases" -ForegroundColor DarkCyan
     if ($winAuth){
         $dbsToDelete = Get-DbaDatabase -SqlInstance $sqlInstance -Database $sourceDb,$targetDb
     }
@@ -189,23 +189,23 @@ Function New-SampleDatabasesAutopilot {
     }
 
     forEach ($db in $dbsToDelete.Name){
-        Write-Verbose "    Dropping database $db"
+        Write-Host "    Dropping database $db" -ForegroundColor DarkCyan
         $sql = "ALTER DATABASE $db SET single_user WITH ROLLBACK IMMEDIATE; DROP DATABASE $db;"
         Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlCredential $SqlCredential
     }
 
     # Create the fullRestore and subset databases
-    Write-Verbose "  Creating the empty Autopilot databases"
+    Write-Host "  Creating the empty Autopilot databases" -ForegroundColor DarkCyan
     New-DbaDatabase -SqlInstance $sqlInstance -Name $sourceDb, $targetDb -SqlCredential $SqlCredential | Out-Null
     
-    Write-Verbose "    Building up the $sourceDb database"
+    Write-Host "    Building up the $sourceDb database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -File $productionDataInsertScript -SqlCredential $SqlCredential | Out-Null
     
-    Write-Verbose "    Building up the $targetDb database"
+    Write-Host "    Building up the $targetDb database" -ForegroundColor DarkCyan
     Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -File $schemaCreateScript -SqlCredential $SqlCredential | Out-Null
     
-    Write-Verbose "  Validating that the databases have been created correctly"
+    Write-Host "  Validating that the databases have been created correctly" -ForegroundColor DarkCyan
     $totalFullRestoreOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $sourceDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders
     $totalSubsetOrders = (Invoke-DbaQuery -SqlInstance $sqlInstance -Database $targetDb -Query "SELECT COUNT (*) AS TotalOrders FROM Sales.Orders" -SqlCredential $SqlCredential).TotalOrders    
     
