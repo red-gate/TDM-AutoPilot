@@ -520,23 +520,43 @@ else {
 # OUTPUT FOLDER CLEANUP AND PREPARATION
 ###################################################################################################
 
-if (Test-Path $output) {
+###################################################################################################
+# OUTPUT FOLDER CLEANUP AND PREPARATION
+###################################################################################################
+
+# Always use a timestamped subfolder for the current run
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$output = Join-Path $output $timestamp
+
+# Try cleaning up the *parent* output folder if it exists
+$parentOutput = Split-Path $output -Parent
+if (Test-Path $parentOutput) {
     Write-Host "INFO: Attempting to delete existing output directory..." -ForegroundColor DarkCyan
     try {
-        Remove-Item -Recurse -Force $output -ErrorAction Stop | Out-Null
+        Remove-Item -Recurse -Force $parentOutput -ErrorAction Stop | Out-Null
         Write-Host "Successfully cleaned the output directory." -ForegroundColor Green
     } 
     catch {
-        Write-Host "Skipping cleanup due to insufficient permissions. Consider manually cleaning '$output'" -ForegroundColor DarkCyan
+        Write-Host "INFO: Skipping cleanup due to insufficient permissions. Previous subfolders may remain in '$parentOutput'" -ForegroundColor DarkCyan
     }
 }
 
+# Ensure the timestamped subfolder exists
 if (-not (Test-Path $output)) {
-    Write-Host "INFO: Creating output directory." -ForegroundColor DarkCyan
-    New-Item -ItemType Directory -Path $output | Out-Null
+    Write-Host "INFO: Creating output directory: $output" -ForegroundColor DarkCyan
+    try {
+        New-Item -ItemType Directory -Path $output -Force | Out-Null
+        Write-Host "Output directory created." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "ERROR: Failed to create output directory '$output'" -ForegroundColor Red
+        Write-Host "Please check permissions or specify a different path using -output." -ForegroundColor Yellow
+        exit 1
+    }
 } else {
-    Write-Host "INFO: Output directory already exists. Skipping creation."
+    Write-Host "INFO: Output directory already exists: $output" -ForegroundColor Yellow
 }
+
 
 ###################################################################################################
 # CONTINUES WITH: Subsetting, Classifying, Masking...
@@ -700,6 +720,8 @@ if ($LASTEXITCODE -ne 0 -or ($rganonymizeClassifyOutput -match "ERROR")) {
     exit $LASTEXITCODE
 }
 Write-Host "rganonymize (Classify) completed successfully" -ForegroundColor Green
+
+
 
 ###################################################################################################
 # MAP: Create masking.json based on the classification file
