@@ -390,13 +390,46 @@ if (-not ($rganonymizeExe -and $rgsubsetExe)){
 # AUTHENTICATE CLI TOOLS (unless skipped)
 ###################################################################################################
 
-if (-not $skipAuth){
-    Write-Host "INFO:  Authorizing rgsubset, and starting a trial (if not already started):"
-    Write-Host "CMD:    rgsubset auth login --i-agree-to-the-eula --start-trial" -ForegroundColor Blue
-    rgsubset auth login --i-agree-to-the-eula --start-trial
-    Write-Output "INFO:  Authorizing rganonymize:"
-    Write-Host "CMD    rganonymize auth login --i-agree-to-the-eula" -ForegroundColor Blue
-    rganonymize auth login --i-agree-to-the-eula
+if (-not $skipAuth) {
+    # Check for offline permit using both User and Machine scopes
+    $offlinePermitPath = [Environment]::GetEnvironmentVariable("REDGATE_LICENSING_PERMIT_PATH", "User")
+    if (-not $offlinePermitPath) {
+        $offlinePermitPath = [Environment]::GetEnvironmentVariable("REDGATE_LICENSING_PERMIT_PATH", "Machine")
+    }
+
+    $skipBecauseOfPermit = $false
+
+    if ($offlinePermitPath) {
+        Write-Host "INFO: Offline permit detected at: $offlinePermitPath" -ForegroundColor Yellow
+
+        if (-not $autoContinue) {
+            do {
+                Write-Host "> Do you want to skip online login and use the offline permit? (Y/N)" -ForegroundColor Yellow
+                $permitResponse = Read-Host
+                $permitResponse = $permitResponse.Trim().ToUpper()
+            } until ($permitResponse -match "^(Y|N)$")
+
+            if ($permitResponse -eq "Y") {
+                $skipBecauseOfPermit = $true
+                Write-Host "Skipping login step and using offline permit." -ForegroundColor Green
+            }
+        } else {
+            # Auto-skip in CI/CD if permit is found
+            $skipBecauseOfPermit = $true
+            Write-Host "Skipping login step and using offline permit (auto mode)." -ForegroundColor Green
+        }
+    }
+
+    if (-not $skipBecauseOfPermit) {
+        Write-Host "INFO:  Authorizing rgsubset, and starting a trial (if not already started):"
+        Write-Host "CMD:    rgsubset auth login --i-agree-to-the-eula --start-trial" -ForegroundColor Blue
+        & rgsubset auth login --i-agree-to-the-eula --start-trial
+
+        Write-Host ""
+        Write-Host "INFO:  Authorizing rganonymize:"
+        Write-Host "CMD:    rganonymize auth login --i-agree-to-the-eula" -ForegroundColor Blue
+        & rganonymize auth login --i-agree-to-the-eula
+    }
 }
 
 # Log current CLI versions
