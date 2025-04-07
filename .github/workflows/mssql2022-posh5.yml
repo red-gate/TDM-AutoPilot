@@ -129,7 +129,7 @@ jobs:
           Write-Output 'Running Autopilot for TDM...'
           Write-Output '  -sqlInstance ${{ env.Instance }}'
           Write-Output '  -sqlUser ${{ env.dbUser }}'
-          .\run-tdm-autopilot.ps1 -sqlUser '${{ env.dbUser }}' -sqlPassword '${{ env.dbPassword }}' -sqlInstance '${{ env.Instance }}' -autoContinue -skipAuth -iAgreeToTheRedgateEula
+          .\run-tdm-autopilot.ps1 -sqlUser '${{ env.dbUser }}' -sqlPassword '${{ env.dbPassword }}' -sqlInstance '${{ env.Instance }}' -trustCert $true -encryptConnection $false -autoContinue -skipAuth -iAgreeToTheRedgateEula
       
       # - name: Validating Results (Northwind Databases)
       #   shell: powershell
