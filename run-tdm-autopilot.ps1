@@ -462,7 +462,8 @@ if (-not $noRestore -and -not $autoContinue) {
     Write-Host "If these databases already exist (e.g. in Azure or pre-provisioned), we can skip this step." -ForegroundColor Yellow
 
     do {
-        $skipProvisionResponse = Read-Host "> Do you want to skip the provisioning step? (Y/N)"
+        Write-Host "> Do you want to skip the provisioning step? (Y/N)" -ForegroundColor Yellow
+        $skipProvisionResponse = Read-Host
         $skipProvisionResponse = $skipProvisionResponse.Trim().ToUpper()
     } until ($skipProvisionResponse -match "^(Y|N)$")
 
