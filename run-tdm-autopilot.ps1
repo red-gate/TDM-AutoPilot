@@ -20,6 +20,7 @@ param (
     $sampleDatabase = "", # Type of database setup: "Autopilot", "Autopilot_Full", or "Backup"
     $logLevel = "Information", # Logging level: Debug, Verbose, Information, Warning, Error, Fatal
     $noRestore = $false, # Set to $true to skip database restore/setup (This assumes the databases already exist)
+    $acceptAllDefaults = $false, # Set to $true to accept the default configuration
     [switch]$autoContinue, # Run in non-interactive mode (for pipelines)
     [switch]$skipAuth, # Skip CLI authentication (assumes already logged in)
     [switch]$iAgreeToTheRedgateEula # Required agreement to Redgate's EULA
@@ -113,7 +114,6 @@ if ($sampleDatabase -eq 'Autopilot_Full') {
     $subsetterOptionsFile = "$PSScriptRoot\Setup_Files\Data_Treatments_Options_Files\rgsubset-options-autopilot.json"
 }
 
-
 ###################################################################################################
 # CONTINUES WITH: PowerShell Edition Detection, EULA Agreement, dbatools Install, CLI Auth...
 ###################################################################################################
@@ -151,6 +151,40 @@ if (-not $iAgreeToTheRedgateEula){
 }
 
 ###################################################################################################
+# DEFAULT VALUES CHECK
+###################################################################################################
+
+# Validate Step - Should Script Default Be Used
+if (-not $autoContinue -and -not $acceptAllDefaults) {
+    Write-Host "Default Configuration Detected" -ForegroundColor DarkCyan
+    Write-Host "The current default values are:" -ForegroundColor DarkCyan
+    Write-Host "  - Target SQL Instance:             $sqlInstance" -ForegroundColor DarkCyan
+    Write-Host "  - Source Database:                 $sourceDb" -ForegroundColor DarkCyan
+    Write-Host "  - Target Database:                 $targetDb" -ForegroundColor DarkCyan
+    if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+        Write-Host "  - Backup Path:               $backupPath" -ForegroundColor DarkCyan
+    }
+    Write-Host "  - Use Windows Authentication?:     $winAuth" -ForegroundColor DarkCyan
+    if (-not [string]::IsNullOrWhiteSpace($sqlUser)) {
+        Write-Host "  - Username:               $sqlUser" -ForegroundColor DarkCyan
+    }
+    Write-Host "  - Trust Server Certificate?:       $trustCert" -ForegroundColor DarkCyan
+    Write-Host "  - Encrypt Connection?:             $encryptConnection" -ForegroundColor DarkCyan
+    Write-Host "  - Skip Database Creation?:         $noRestore" -ForegroundColor DarkCyan
+    Write-Host "" 
+    Write-Host "> Would you like to accept the above configuration? (Y/N) [Default: Y]" -ForegroundColor Yellow
+    $acceptAllDefaults = Read-Host
+    $acceptAllDefaults = if ([string]::IsNullOrWhiteSpace($acceptAllDefaults)) { "Y" } else { $acceptAllDefaults.ToUpper() }
+
+    if ($acceptAllDefaults -eq "Y") {
+        Write-Host "Default configuration accepted" -ForegroundColor Green
+        $acceptAllDefaults  = $acceptAllDefaults -eq "Y"
+    } else {
+        $acceptAllDefaults  = $acceptAllDefaults -eq "Y"
+    }
+}
+
+###################################################################################################
 # CHECK AND INSTALL dbatools MODULE IF NEEDED
 ###################################################################################################
 
@@ -159,7 +193,7 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Warning "The required module 'dbatools' is not currently installed."
     Write-Host "It is needed to continue running this script."
 
-    if ($autoContinue){
+    if ($autoContinue -or $acceptAllDefaults){
         $installNow = "Y"
     } else {
         do {
@@ -200,11 +234,9 @@ else {
 ###################################################################################################
 # AUTHENTICATION SETUP (Windows or SQL Auth)
 ###################################################################################################
-Write-Host "INFO: The current SQL Server instance is set to: $sqlInstance" -ForegroundColor DarkCyan
-
-if (-not $autoContinue) {
+if (-not $autoContinue -and -not $acceptAllDefaults) {
     $validInputReceived = $false
-
+    Write-Host "INFO: The current SQL Server instance is set to: $sqlInstance" -ForegroundColor DarkCyan
     do {
         Write-Host "> Enter the SQL Server instance to connect to (press Enter to keep the current value):" -ForegroundColor Yellow
         $newSqlInstance = Read-Host
@@ -227,13 +259,12 @@ if (-not $autoContinue) {
     }
 }
 
-Write-Host "INFO: Trust Server Certificate is currently set to: $trustCert" -ForegroundColor DarkCyan
-
-if (-not $autoContinue) {
+if (-not $autoContinue -and -not $acceptAllDefaults) {
+    Write-Host "INFO: Trust Server Certificate is currently set to: $trustCert" -ForegroundColor DarkCyan
     do {
-        Write-Host "> Do you want to trust the SQL Server's certificate? (Y/N)" -ForegroundColor Yellow
+        Write-Host "> Do you want to trust the SQL Server's certificate? (Y/N) [Default: Y]" -ForegroundColor Yellow
         $trustCertResponse = Read-Host
-        $trustCertResponse = $trustCertResponse.Trim().ToUpper()
+        $trustCertResponse = if ([string]::IsNullOrWhiteSpace($trustCertResponse)) { "Y" } else { $trustCertResponse.Trim().ToUpper() }
     } until ($trustCertResponse -match '^(Y|N)$')
 
     $trustCert = $trustCertResponse -eq "Y"
@@ -242,13 +273,12 @@ if (-not $autoContinue) {
     Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
 }
 
-Write-Host "INFO: Encrypt Connection is currently set to: $encryptConnection" -ForegroundColor DarkCyan
-
-if (-not $autoContinue) {
+if (-not $autoContinue -and -not $acceptAllDefaults) {
+    Write-Host "INFO: Encrypt Connection is currently set to: $encryptConnection" -ForegroundColor DarkCyan
     do {
-        Write-Host "> Do you want to Encrypt Connection? (Y/N)" -ForegroundColor Yellow
+        Write-Host "> Do you want to Encrypt Connection? (Y/N) [Default: Y]" -ForegroundColor Yellow
         $encryptConnectionResponse = Read-Host
-        $encryptConnectionResponse = $encryptConnectionResponse.Trim().ToUpper()
+        $encryptConnectionResponse = if ([string]::IsNullOrWhiteSpace($encryptConnectionResponse)) { "Y" } else { $encryptConnectionResponse.Trim().ToUpper() }
     } until ($encryptConnectionResponse -match '^(Y|N)$')
 
     $encryptConnection = $encryptConnectionResponse -eq "Y"
@@ -256,10 +286,10 @@ if (-not $autoContinue) {
     Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
 }
 
-if ($autoContinue) {
+if ($autoContinue -or $acceptAllDefaults) {
     Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
     Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
-    $trustCertValue = "yes" # Sets variable to yes or no for use in the connection string logic
+    $trustCertValue = if ($trustCert) { "yes" } else { "no" } # Sets variable to yes or no for use in the connection string logic
 }
 
 # === Connection String Construction ===
@@ -268,12 +298,11 @@ $targetConnectionString = ""
 
 # Determine if Windows Auth should be used
 if ([string]::IsNullOrWhiteSpace($sqlUser) -and [string]::IsNullOrWhiteSpace($sqlPassword)) {
-    Write-Host "INFO: No SQL credentials provided. Assuming Windows Authentication." -ForegroundColor DarkCyan
-
-    if (-not $autoContinue) {
-        Write-Host "> Do you want to proceed with Windows Authentication? (Y/N)" -ForegroundColor Yellow
+    if (-not $autoContinue -and -not $acceptAllDefaults) {
+        Write-Host "INFO: No SQL credentials provided. Assuming Windows Authentication." -ForegroundColor DarkCyan
+        Write-Host "> Do you want to proceed with Windows Authentication? (Y/N) [Default: Y]" -ForegroundColor Yellow
         $confirmWinAuth = Read-Host
-        $confirmWinAuth = $confirmWinAuth.Trim().ToUpper()
+        $confirmWinAuth = if ([string]::IsNullOrWhiteSpace($confirmWinAuth)) { "Y" } else { $confirmWinAuth.Trim().ToUpper() }
 
         if ($confirmWinAuth -ne "Y") {
             Write-Host "INFO: Windows Authentication not confirmed. Falling back to SQL Authentication..." -ForegroundColor Yellow
@@ -301,7 +330,7 @@ if ($useWindowsAuth) {
 else {
     $winAuth = $false
 
-    if (-not $autoContinue -and ([string]::IsNullOrWhiteSpace($sqlUser) -or [string]::IsNullOrWhiteSpace($sqlPassword))) {
+    if (-not $autoContinue -and -not $acceptAllDefaults -and ([string]::IsNullOrWhiteSpace($sqlUser) -or [string]::IsNullOrWhiteSpace($sqlPassword))) {
         Write-Host ""
         Write-Host "INFO:   SQL Authentication has been selected, but username and/or password are not provided." -ForegroundColor Yellow
         Write-Host "   You have two options:" -ForegroundColor Yellow
@@ -332,36 +361,33 @@ else {
 ###################################################################################################
 # CONFIGURATION SUMMARY
 ###################################################################################################
-Write-Host "Configuration:" -ForegroundColor DarkCyan
-Write-Host "- sqlInstance:             $sqlInstance" -ForegroundColor DarkCyan
-Write-Host "- databaseName:            $databaseName" -ForegroundColor DarkCyan
-Write-Host "- sourceDb:                $sourceDb" -ForegroundColor DarkCyan
-Write-Host "- targetDb:                $targetDb" -ForegroundColor DarkCyan
-if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
-    Write-Host "- backupPath:              $backupPath" -ForegroundColor DarkCyan
+if (-not $acceptAllDefaults) {
+    Write-Host "Configuration:" -ForegroundColor DarkCyan
+    Write-Host "  - Target SQL Instance:             $sqlInstance" -ForegroundColor DarkCyan
+    Write-Host "  - Source Database:                 $sourceDb" -ForegroundColor DarkCyan
+    Write-Host "  - Target Database:                 $targetDb" -ForegroundColor DarkCyan
+    if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+    Write-Host "  - Backup Path:                     $backupPath" -ForegroundColor DarkCyan
+    }
+    Write-Host "  - Use Windows Authentication?:     $winAuth" -ForegroundColor DarkCyan
+    if (-not [string]::IsNullOrWhiteSpace($sqlUser)) {
+    Write-Host "  - Username:                        $sqlUser" -ForegroundColor DarkCyan
+    }
+    Write-Host "  - Trust Server Certificate?:       $trustCert" -ForegroundColor DarkCyan
+    Write-Host "  - Encrypt Connection?:             $encryptConnection" -ForegroundColor DarkCyan
+    Write-Host "  - Source Connection String:        $sourceConnectionStringDisplay" -ForegroundColor DarkCyan
+    Write-Host "  - Target Connection String:        $targetConnectionStringDisplay" -ForegroundColor DarkCyan
+    Write-Host "  - Skip Database Creation?:         $noRestore" -ForegroundColor DarkCyan
+    Write-Host "" 
 }
-elseif ($sampleDatabase -eq 'Autopilot_Full' -or $sampleDatabase -eq 'Autopilot') {
-    Write-Host "- schemaScript:            $schemaCreateScript" -ForegroundColor DarkCyan
-    Write-Host "- InsertScript:            $productionDataInsertScript" -ForegroundColor DarkCyan
-}
-Write-Host "- subsetterOptionsFile:    $subsetterOptionsFile" -ForegroundColor DarkCyan
-Write-Host "- Using Windows Auth:      $winAuth" -ForegroundColor DarkCyan
-Write-Host "- sourceConnectionString:  $sourceConnectionStringDisplay" -ForegroundColor DarkCyan
-Write-Host "- targetConnectionString:  $targetConnectionStringDisplay" -ForegroundColor DarkCyan
-Write-Host "- output:                  $output" -ForegroundColor DarkCyan
-Write-Host "- trustCert:               $trustCert" -ForegroundColor DarkCyan
-Write-Host "- encryptConnection:       $encryptConnection" -ForegroundColor DarkCyan
-Write-Host "- sampleDatabase:          $sampleDatabase" -ForegroundColor DarkCyan
-Write-Host "- noRestore:               $noRestore" -ForegroundColor DarkCyan
-Write-Host "" 
 
 ###################################################################################################
 # INSTALL / VALIDATE TDM CLI TOOLS
 ###################################################################################################
 
-if (-not $autoContinue) {
+if (-not $autoContinue -and -not $acceptAllDefaults) {
     do {
-        $tdmInstallResponse = Get-ValidatedInput -PromptMessage "> Do you want to install the latest version of TDM Data Treatments? (y/n)" -ErrorMessage "> Please enter Y or N"
+        $tdmInstallResponse = Get-ValidatedInput -PromptMessage "> Do you want to install the latest version of TDM Data Treatments? (Y/N)" -ErrorMessage "> Please enter Y or N"
         $tdmInstallResponse = $tdmInstallResponse.ToUpper()
     } until ($tdmInstallResponse -match "^(Y|N)$")
 } else {
@@ -410,9 +436,9 @@ if (-not $skipAuth) {
 
         if (-not $autoContinue) {
             do {
-                Write-Host "> Do you want to skip online login and use the offline permit? (Y/N)" -ForegroundColor Yellow
+                Write-Host "> Do you want to skip online login and use the offline permit? (Y/N) [Default: Y]" -ForegroundColor Yellow
                 $permitResponse = Read-Host
-                $permitResponse = $permitResponse.Trim().ToUpper()
+                $permitResponse = if ([string]::IsNullOrWhiteSpace($permitResponse)) { "Y" } else { $permitResponse.Trim().ToUpper() }
             } until ($permitResponse -match "^(Y|N)$")
 
             if ($permitResponse -eq "Y") {
@@ -454,24 +480,24 @@ Write-Host ""
 if (-not $noRestore -and -not $autoContinue) {
     Write-Host ""
     Write-Host "INFO: Database provisioning step is about to begin." -ForegroundColor DarkCyan
-    Write-Host "       This step will restore or create the databases:" -ForegroundColor DarkCyan
+    Write-Host "       This step will restore or create the following databases:" -ForegroundColor DarkCyan
     Write-Host "         $sourceDb" -ForegroundColor Blue
     Write-Host "         $targetDb" -ForegroundColor Blue
     Write-Host "       On the SQL Server instance: $sqlInstance" -ForegroundColor DarkCyan
     Write-Host ""
-    Write-Host "If these databases already exist (e.g. in Azure or pre-provisioned), we can skip this step." -ForegroundColor Yellow
+    Write-Host "If these databases already exist (e.g. on Azure SQL or have been pre-created), you can choose to skip this step." -ForegroundColor Yellow
 
     do {
-        Write-Host "> Do you want to skip the provisioning step? (Y/N)" -ForegroundColor Yellow
-        $skipProvisionResponse = Read-Host
-        $skipProvisionResponse = $skipProvisionResponse.Trim().ToUpper()
-    } until ($skipProvisionResponse -match "^(Y|N)$")
+        Write-Host "> Do you want to create or restore the databases now? (Y/N) [Default: Y]" -ForegroundColor Yellow
+        $provisionResponse = Read-Host
+        $provisionResponse = if ([string]::IsNullOrWhiteSpace($provisionResponse)) { "Y" } else { $provisionResponse.Trim().ToUpper() }
+    } until ($provisionResponse -match "^(Y|N)$")
 
-    if ($skipProvisionResponse -eq "Y") {
+    if ($provisionResponse -eq "N") {
         $noRestore = $true
-        Write-Host "Database provisioning will be skipped." -ForegroundColor Green
+        Write-Host "Skipping database provisioning. Ensure $sourceDb and $targetDb already exist on $sqlInstance." -ForegroundColor Green
     } else {
-        Write-Host "Continuing with provisioning step..." -ForegroundColor Green
+        Write-Host "Continuing with database provisioning..." -ForegroundColor Green
     }
 }
 
@@ -482,19 +508,19 @@ if ($noRestore) {
     Write-Output "*********************************************************************************************************"
 }
 elseif ($backupPath) {
-    Write-Host ""
-    Write-Host "You are about to restore $sourceDb and $targetDb from a backup file located at:" -ForegroundColor Yellow
-    Write-Host "$backupPath" -ForegroundColor DarkCyan
-    if (-not $autoContinue) {
-        do {
-            $confirmRestore = Get-ValidatedInput -PromptMessage "> Do you want to proceed? (y/n)" -ErrorMessage "> Please enter Y or N"
-            $confirmRestore = $confirmRestore.ToUpper()
-        } until ($confirmRestore -match "^(Y|N)$")
-        if ($confirmRestore -ne "Y") {
-            Write-Host "User opted out of database restore from backup. Exiting..." -ForegroundColor Red
-            break
-        }
-    }
+    # Write-Host ""
+    # Write-Host "You are about to restore $sourceDb and $targetDb from a backup file located at:" -ForegroundColor Yellow
+    # Write-Host "$backupPath" -ForegroundColor DarkCyan
+    # if (-not $autoContinue) {
+    #     do {
+    #         $confirmRestore = Get-ValidatedInput -PromptMessage "> Do you want to proceed? (Y/N)" -ErrorMessage "> Please enter Y or N"
+    #         $confirmRestore = $confirmRestore.ToUpper()
+    #     } until ($confirmRestore -match "^(Y|N)$")
+    #     if ($confirmRestore -ne "Y") {
+    #         Write-Host "User opted out of database restore from backup. Exiting..." -ForegroundColor Red
+    #         break
+    #     }
+    # }
 
     Write-Output "  Building $sourceDb and $targetDb from backup file at $BackupPath."
     $dbCreateSuccessful = Restore-StagingDatabasesFromBackup -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -sourceBackupPath:$backupPath -SqlCredential:$SqlCredential
@@ -506,19 +532,19 @@ elseif ($backupPath) {
     }
 }
 elseif ($sampleDatabase -eq "Autopilot_Full") {
-    Write-Host ""
-    Write-Host "INFO: You are about to create ALL Autopilot databases using predefined schema and data scripts." -ForegroundColor DarkCyan
-    Write-Host "INFO: This will create or update the Autopilot suite of databases in the target instance" -ForegroundColor DarkCyan
-    if (-not $autoContinue) {
-        do {
-            $confirmFullCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with database creation? (y/n)" -ErrorMessage "> Please enter Y or N"
-            $confirmFullCreate = $confirmFullCreate.ToUpper()
-        } until ($confirmFullCreate -match "^(Y|N)$")
-        if ($confirmFullCreate -ne "Y") {
-            Write-Host "User opted out of full Autopilot database creation. Exiting..." -ForegroundColor Red
-            break
-        }
-    }
+    # Write-Host ""
+    # Write-Host "INFO: You are about to create ALL Autopilot databases using predefined schema and data scripts." -ForegroundColor DarkCyan
+    # Write-Host "INFO: This will create or update the Autopilot suite of databases in the target instance" -ForegroundColor DarkCyan
+    # if (-not $autoContinue) {
+    #     do {
+    #         $confirmFullCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with database creation? (Y/N)" -ErrorMessage "> Please enter Y or N"
+    #         $confirmFullCreate = $confirmFullCreate.ToUpper()
+    #     } until ($confirmFullCreate -match "^(Y|N)$")
+    #     if ($confirmFullCreate -ne "Y") {
+    #         Write-Host "User opted out of full Autopilot database creation. Exiting..." -ForegroundColor Red
+    #         break
+    #     }
+    # }
 
     Write-Host "INFO: Starting full database creation process..."
     New-SampleDatabasesAutopilotFull -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
@@ -530,19 +556,19 @@ elseif ($sampleDatabase -eq "Autopilot_Full") {
     }
 }
 elseif ($sampleDatabase -eq "Autopilot") {
-    Write-Host ""
-    Write-Host "INFO: You are about to create standard Autopilot databases from schema and data scripts." -ForegroundColor DarkCyan
-    Write-Host "INFO: This will create or update the databases: $sourceDb and $targetDb" -ForegroundColor DarkCyan
-    if (-not $autoContinue) {
-        do {
-            $confirmStandardCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with the database creation? (y/n)" -ErrorMessage "> Please enter Y or N"
-            $confirmStandardCreate = $confirmStandardCreate.ToUpper()
-        } until ($confirmStandardCreate -match "^(Y|N)$")
-        if ($confirmStandardCreate -ne "Y") {
-            Write-Host "User opted out of standard Autopilot database creation. Exiting..." -ForegroundColor Red
-            break
-        }
-    }
+    # Write-Host ""
+    # Write-Host "INFO: You are about to create standard Autopilot databases from schema and data scripts." -ForegroundColor DarkCyan
+    # Write-Host "INFO: This will create or update the databases: $sourceDb and $targetDb" -ForegroundColor DarkCyan
+    # if (-not $autoContinue) {
+    #     do {
+    #         $confirmStandardCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with the database creation? (Y/N)" -ErrorMessage "> Please enter Y or N"
+    #         $confirmStandardCreate = $confirmStandardCreate.ToUpper()
+    #     } until ($confirmStandardCreate -match "^(Y|N)$")
+    #     if ($confirmStandardCreate -ne "Y") {
+    #         Write-Host "User opted out of standard Autopilot database creation. Exiting..." -ForegroundColor Red
+    #         break
+    #     }
+    # }
 
     Write-Host "INFO: Starting sample database creation process..." -ForegroundColor DarkCyan
     New-SampleDatabasesAutopilot -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
@@ -555,19 +581,19 @@ elseif ($sampleDatabase -eq "Autopilot") {
 }
 else {
     # Fallback to default setup
-    Write-Host ""
-    Write-Host "INFO: You are about to create the Autopilot databases." -ForegroundColor DarkCyan
-    Write-Host "INFO: This will create or update the databases: $sourceDb and $targetDb" -ForegroundColor DarkCyan
-    if (-not $autoContinue) {
-        do {
-            $confirmFallbackCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with the database creation? (y/n)" -ErrorMessage "> Please enter Y or N"
-            $confirmFallbackCreate = $confirmFallbackCreate.ToUpper()
-        } until ($confirmFallbackCreate -match "^(Y|N)$")
-        if ($confirmFallbackCreate -ne "Y") {
-            Write-Host "User opted out of default database creation. Exiting..." -ForegroundColor Red
-            break
-        }
-    }
+    # Write-Host ""
+    # Write-Host "INFO: You are about to create the Autopilot databases." -ForegroundColor DarkCyan
+    # Write-Host "INFO: This will create or update the databases: $sourceDb and $targetDb" -ForegroundColor DarkCyan
+    # if (-not $autoContinue) {
+    #     do {
+    #         $confirmFallbackCreate = Get-ValidatedInput -PromptMessage "> Do you want to proceed with the database creation? (y/n)" -ErrorMessage "> Please enter Y or N"
+    #         $confirmFallbackCreate = $confirmFallbackCreate.ToUpper()
+    #     } until ($confirmFallbackCreate -match "^(Y|N)$")
+    #     if ($confirmFallbackCreate -ne "Y") {
+    #         Write-Host "User opted out of default database creation. Exiting..." -ForegroundColor Red
+    #         break
+    #     }
+    # }
 
     Write-Host "Starting default database creation process..." -ForegroundColor DarkCyan
     New-SampleDatabasesAutopilot -WinAuth:$winAuth -sqlInstance:$sqlInstance -sourceDb:$sourceDb -targetDb:$targetDb -schemaCreateScript:$schemaCreateScript -productionDataInsertScript:$productionDataInsertScript -testDataInsertScript:$testDataInsertScript -SqlCredential:$SqlCredential | Tee-Object -Variable dbCreateSuccessful
@@ -645,7 +671,7 @@ else {
     Write-Host "  USE $sourceDb" -ForegroundColor Blue  -BackgroundColor Black 
     Write-Host "  --USE $targetDb -- Uncomment to run on target" -ForegroundColor Blue  -BackgroundColor Black 
     Write-Host "  SELECT COUNT (*) AS TotalOrders FROM Sales.Orders;" -ForegroundColor Blue  -BackgroundColor Black  
-    Write-Host "  SELECT TOP 20 o.OrderID, o.CustomerID, o.ShipAddress, o.ShipCity, c.Address, c.City, c.ContactName" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  SELECT TOP 20 o.OrderID, o.CustomerID, o.ShipAddress AS 'o.ShipAddress', o.ShipCity AS 'o.ShipCity', c.Address AS 'c.Address', c.City AS 'c.City', c.ContactName AS 'c.ContactName'" -ForegroundColor Blue  -BackgroundColor Black 
     Write-Host "  FROM Sales.Customers c JOIN Sales.Orders o ON o.CustomerID = c.CustomerID" -ForegroundColor Blue  -BackgroundColor Black
     Write-Host "  ORDER BY o.OrderID ASC;" -ForegroundColor Blue  -BackgroundColor Black  
 }
@@ -671,7 +697,7 @@ Write-Output ""
 # Prompt for confirmation (unless running in automated mode)
 if (-not $autoContinue) {
     do {
-        $continueSubset = Get-ValidatedInput -PromptMessage "> Would you like to continue? (y/n)" -ErrorMessage "> Would you like to continue? (y/n)"
+        $continueSubset = Get-ValidatedInput -PromptMessage "> Would you like to continue? (Y/N)" -ErrorMessage "> Would you like to continue? (y/n)"
         $continueSubset = $continueSubset.ToUpper()
     } until ($continueSubset -match "^(Y|N)$")
     if ($continueSubset -notlike "y") {
@@ -748,7 +774,7 @@ Write-Host ""
 
 if (-not $autoContinue) {
     do {
-        $continueClassify = Get-ValidatedInput -PromptMessage "> Would you like to continue? (y/n)" -ErrorMessage "> Would you like to continue? (y/n)"
+        $continueClassify = Get-ValidatedInput -PromptMessage "> Would you like to continue? (Y/N)" -ErrorMessage "> Would you like to continue? (y/n)"
         $continueClassify = $continueClassify.ToUpper()
     } until ($continueClassify -match "^(Y|N)$")
     if ($continueClassify -notlike "y") {
@@ -802,7 +828,7 @@ Write-Host ""
 
 if (-not $autoContinue) {
     do {
-        $continueMap = Get-ValidatedInput -PromptMessage "> Would you like to continue? (y/n)" -ErrorMessage "> Would you like to continue? (y/n)"
+        $continueMap = Get-ValidatedInput -PromptMessage "> Would you like to continue? (Y/N)" -ErrorMessage "> Would you like to continue? (Y/N)"
         $continueMap = $continueMap.ToUpper()
     } until ($continueMap -match "^(Y|N)$")
     if ($continueMap -notlike "y") {
@@ -850,7 +876,7 @@ Write-Host ""
 
 if (-not $autoContinue) {
     do {
-        $continueMask = Get-ValidatedInput -PromptMessage "> Would you like to continue? (y/n)" -ErrorMessage "> Would you like to continue? (y/n)"
+        $continueMask = Get-ValidatedInput -PromptMessage "> Would you like to continue? (Y/N)" -ErrorMessage "> Would you like to continue? (Y/N)"
         $continueMask = $continueMask.ToUpper()
     } until ($continueMask -match "^(Y|N)$")
     if ($continueMask -notlike "y") {
