@@ -19,9 +19,9 @@ param (
     $databaseName = "Autopilot", # Name of the target database
     $sampleDatabase = "", # Type of database setup: "Autopilot", "Autopilot_Full", or "Backup"
     $logLevel = "Information", # Logging level: Debug, Verbose, Information, Warning, Error, Fatal
+    $noRestore = $false, # Set to $true to skip database restore/setup (This assumes the databases already exist)
     [switch]$autoContinue, # Run in non-interactive mode (for pipelines)
     [switch]$skipAuth, # Skip CLI authentication (assumes already logged in)
-    [switch]$noRestore, # Skip database restore/setup (assumes they already exist)
     [switch]$iAgreeToTheRedgateEula # Required agreement to Redgate's EULA
 )
 
@@ -227,6 +227,40 @@ if (-not $autoContinue) {
     }
 }
 
+Write-Host "INFO: Trust Server Certificate is currently set to: $trustCert" -ForegroundColor DarkCyan
+
+if (-not $autoContinue) {
+    do {
+        Write-Host "> Do you want to trust the SQL Server's certificate? (Y/N)" -ForegroundColor Yellow
+        $trustCertResponse = Read-Host
+        $trustCertResponse = $trustCertResponse.Trim().ToUpper()
+    } until ($trustCertResponse -match '^(Y|N)$')
+
+    $trustCert = $trustCertResponse -eq "Y"
+    $trustCertValue = if ($trustCert) { "yes" } else { "no" } # Sets variable to yes or no for use in the connection string logic
+    Write-Host "Trust Server Certificate Set to $trustCert" -ForegroundColor Green
+    Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
+}
+
+Write-Host "INFO: Encrypt Connection is currently set to: $encryptConnection" -ForegroundColor DarkCyan
+
+if (-not $autoContinue) {
+    do {
+        Write-Host "> Do you want to Encrypt Connection? (Y/N)" -ForegroundColor Yellow
+        $encryptConnectionResponse = Read-Host
+        $encryptConnectionResponse = $encryptConnectionResponse.Trim().ToUpper()
+    } until ($encryptConnectionResponse -match '^(Y|N)$')
+
+    $encryptConnection = $encryptConnectionResponse -eq "Y"
+    Write-Host "Encrypt Connection Set to $encryptConnection" -ForegroundColor Green
+    Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
+}
+
+if ($autoContinue) {
+    Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
+    Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
+    $trustCertValue = "yes" # Sets variable to yes or no for use in the connection string logic
+}
 
 # === Connection String Construction ===
 $sourceConnectionString = ""
@@ -258,8 +292,11 @@ if ([string]::IsNullOrWhiteSpace($sqlUser) -and [string]::IsNullOrWhiteSpace($sq
 # === Handle authentication ===
 if ($useWindowsAuth) {
     $winAuth = $true
-    $sourceConnectionString = "`"server=$sqlInstance;database=$sourceDb;Trusted_Connection=yes;TrustServerCertificate=yes`""
-    $targetConnectionString = "`"server=$sqlInstance;database=$targetDb;Trusted_Connection=yes;TrustServerCertificate=yes`""
+    $sourceConnectionString = "`"server=$sqlInstance;database=$sourceDb;Trusted_Connection=yes;TrustServerCertificate=$trustCertValue`""
+    $targetConnectionString = "`"server=$sqlInstance;database=$targetDb;Trusted_Connection=yes;TrustServerCertificate=$trustCertValue`""
+
+    $sourceConnectionStringDisplay = $sourceConnectionString
+    $targetConnectionStringDisplay = $targetConnectionString
 }
 else {
     $winAuth = $false
@@ -284,43 +321,12 @@ else {
         $plainPassword = $sqlPassword
     }
 
-    $sourceConnectionString = "server=$sqlInstance;database=$sourceDb;TrustServerCertificate=yes;UID=$sqlUser;Password=$plainPassword;"
-    $targetConnectionString = "server=$sqlInstance;database=$targetDb;TrustServerCertificate=yes;UID=$sqlUser;Password=$plainPassword;"
-}
+    $sourceConnectionString = "server=$sqlInstance;database=$sourceDb;TrustServerCertificate=$trustCertValue;UID=$sqlUser;Password=$plainPassword;"
+    $targetConnectionString = "server=$sqlInstance;database=$targetDb;TrustServerCertificate=$trustCertValue;UID=$sqlUser;Password=$plainPassword;"
 
-
-
-Write-Host "INFO: Trust Server Certificate is currently set to: $trustCert" -ForegroundColor DarkCyan
-
-if (-not $autoContinue) {
-    do {
-        Write-Host "> Do you want to trust the SQL Server's certificate? (Y/N)" -ForegroundColor Yellow
-        $trustCertResponse = Read-Host
-        $trustCertResponse = $trustCertResponse.Trim().ToUpper()
-    } until ($trustCertResponse -match '^(Y|N)$')
-
-    $trustCert = $trustCertResponse -eq "Y"
-    Write-Host "Trust Server Certificate Set to $trustCert" -ForegroundColor Green
-    Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
-}
-
-Write-Host "INFO: Encrypt Connection is currently set to: $encryptConnection" -ForegroundColor DarkCyan
-
-if (-not $autoContinue) {
-    do {
-        Write-Host "> Do you want to Encrypt Connection? (Y/N)" -ForegroundColor Yellow
-        $encryptConnectionResponse = Read-Host
-        $encryptConnectionResponse = $encryptConnectionResponse.Trim().ToUpper()
-    } until ($encryptConnectionResponse -match '^(Y|N)$')
-
-    $encryptConnection = $encryptConnectionResponse -eq "Y"
-    Write-Host "Encrypt Connection Set to $encryptConnection" -ForegroundColor Green
-    Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
-}
-
-if ($autoContinue) {
-    Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $trustCert
-    Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $encryptConnection
+    # Redacted versions for logging/output only
+    $sourceConnectionStringDisplay = "server=$sqlInstance;database=$sourceDb;TrustServerCertificate=$trustCertValue;UID=$sqlUser;Password=***;"
+    $targetConnectionStringDisplay = "server=$sqlInstance;database=$targetDb;TrustServerCertificate=$trustCertValue;UID=$sqlUser;Password=***;"
 }
 
 ###################################################################################################
@@ -340,8 +346,8 @@ elseif ($sampleDatabase -eq 'Autopilot_Full' -or $sampleDatabase -eq 'Autopilot'
 }
 Write-Host "- subsetterOptionsFile:    $subsetterOptionsFile" -ForegroundColor DarkCyan
 Write-Host "- Using Windows Auth:      $winAuth" -ForegroundColor DarkCyan
-Write-Host "- sourceConnectionString:  $sourceConnectionString" -ForegroundColor DarkCyan
-Write-Host "- targetConnectionString:  $targetConnectionString" -ForegroundColor DarkCyan
+Write-Host "- sourceConnectionString:  $sourceConnectionStringDisplay" -ForegroundColor DarkCyan
+Write-Host "- targetConnectionString:  $targetConnectionStringDisplay" -ForegroundColor DarkCyan
 Write-Host "- output:                  $output" -ForegroundColor DarkCyan
 Write-Host "- trustCert:               $trustCert" -ForegroundColor DarkCyan
 Write-Host "- encryptConnection:       $encryptConnection" -ForegroundColor DarkCyan
@@ -444,6 +450,29 @@ Write-Host ""
 ###################################################################################################
 # DATABASE PROVISIONING (Restore/Create/Skip)
 ###################################################################################################
+
+if (-not $noRestore -and -not $autoContinue) {
+    Write-Host ""
+    Write-Host "INFO: Database provisioning step is about to begin." -ForegroundColor DarkCyan
+    Write-Host "       This step will restore or create the databases:" -ForegroundColor DarkCyan
+    Write-Host "         $sourceDb" -ForegroundColor Blue
+    Write-Host "         $targetDb" -ForegroundColor Blue
+    Write-Host "       On the SQL Server instance: $sqlInstance" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "If these databases already exist (e.g. in Azure or pre-provisioned), we can skip this step." -ForegroundColor Yellow
+
+    do {
+        $skipProvisionResponse = Read-Host "> Do you want to skip the provisioning step? (Y/N)"
+        $skipProvisionResponse = $skipProvisionResponse.Trim().ToUpper()
+    } until ($skipProvisionResponse -match "^(Y|N)$")
+
+    if ($skipProvisionResponse -eq "Y") {
+        $noRestore = $true
+        Write-Host "Database provisioning will be skipped." -ForegroundColor Green
+    } else {
+        Write-Host "Continuing with provisioning step..." -ForegroundColor Green
+    }
+}
 
 if ($noRestore) {
     Write-Output "*********************************************************************************************************"
@@ -629,10 +658,10 @@ Write-Host "Next:" -ForegroundColor DarkCyan
 Write-Host "We will run rgsubset to copy a subset of the data from $sourceDb to $targetDb." -ForegroundColor DarkCyan
 Write-Host "The rgsubset CLI command can be found below in blue for reference:" -ForegroundColor DarkCyan
 if ($backupPath){
-    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionStringDisplay --target-connection-string=$targetConnectionStringDisplay --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
 }
 else {
-    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionString --target-connection-string=$targetConnectionString --options-file `"$subsetterOptionsFile`" --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
+    Write-Host "  rgsubset run --database-engine=sqlserver --source-connection-string=$sourceConnectionStringDisplay --target-connection-string=$targetConnectionStringDisplay --options-file `"$subsetterOptionsFile`" --target-database-write-mode Overwrite" -ForegroundColor Blue  -BackgroundColor Black 
     Write-Host "This will include only relevant tables as defined in: $subsetterOptionsFile"
 }
 Write-Output "*********************************************************************************************************"
@@ -712,7 +741,7 @@ Write-Host "Observe:" -ForegroundColor DarkCyan
 Write-Host "Classification JSON will be created at $output to document discovered PII in $targetDb" -ForegroundColor DarkCyan
 Write-Host "The next step uses the Classify feature of the rganonymize CLI. This detects sensitive columns in the target database." -ForegroundColor DarkCyan
 Write-Host "See below for the reference CLI command:" -ForegroundColor DarkCyan
-Write-Host "  rganonymize classify --database-engine SqlServer --connection-string $targetConnectionString --classification-file `"$output\classification.json`" --output-all-columns" -ForegroundColor Blue  -BackgroundColor Black 
+Write-Host "  rganonymize classify --database-engine SqlServer --connection-string $targetConnectionStringDisplay --classification-file `"$output\classification.json`" --output-all-columns" -ForegroundColor Blue  -BackgroundColor Black 
 Write-Host "*********************************************************************************************************"
 Write-Host ""
 
@@ -814,7 +843,7 @@ Write-Host "Observe:" -ForegroundColor DarkCyan
 Write-Host "The data in $targetDb will now be masked based on masking.json" -ForegroundColor DarkCyan
 Write-Host "The final step uses the 'mask' feature of the rganonymize CLI. This step puts the plan into action and masks the target databases date." -ForegroundColor DarkCyan
 Write-Host "See below for the reference CLI command:" -ForegroundColor DarkCyan
-Write-Host "  rganonymize mask --database-engine SqlServer --connection-string $targetConnectionString --masking-file `"$output\masking.json`"" -ForegroundColor Blue  -BackgroundColor Black 
+Write-Host "  rganonymize mask --database-engine SqlServer --connection-string $targetConnectionStringDisplay --masking-file `"$output\masking.json`"" -ForegroundColor Blue  -BackgroundColor Black 
 Write-Host "*********************************************************************************************************"
 Write-Host ""
 
