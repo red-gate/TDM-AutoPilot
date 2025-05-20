@@ -16,7 +16,7 @@ on: # push, pr, nightly, and on demand, for all branches
 jobs:
   run-autopilot-sql22-psh5:
     runs-on: windows-latest
-    name: run-tdm-autopilot-sql22-psh5
+    name: Run-Autopilot-sql22-psh5
     environment: 'build-posh5'
     steps:
       - name: Checkout code
@@ -101,7 +101,7 @@ jobs:
           # Create an empty SQL Server instance on which to run autopilot
           Write-Output "Creating data container"
           $emptyDiName = 'autopilot-sqlserver-2022-empty'
-          $output = .\rgclone create dc -i $emptyDiName -t 20m -o json | ConvertFrom-Json
+          $output = .\rgclone create dc -i $emptyDiName -t 15m -o json | ConvertFrom-Json
           $dbPassword = $output.password
           $dbUser = $output.user
           $sqlhost = $output.host
@@ -129,7 +129,7 @@ jobs:
           Write-Output 'Running Autopilot for TDM...'
           Write-Output '  -sqlInstance ${{ env.Instance }}'
           Write-Output '  -sqlUser ${{ env.dbUser }}'
-          .\run-tdm-autopilot.ps1 -sqlUser '${{ env.dbUser }}' -sqlPassword '${{ env.dbPassword }}' -sqlInstance '${{ env.Instance }}' -trustCert $true -encryptConnection $false -autoContinue -skipAuth -iAgreeToTheRedgateEula
+          .\Run-Autopilot.ps1 -configFile "Autopilot-Configuration_Automation.conf" -sqlUser '${{ env.dbUser }}' -sqlPassword '${{ env.dbPassword }}' -sqlInstance '${{ env.Instance }}' -trustCert $true -encryptConnection $false -autoContinue -skipAuth -iAgreeToTheRedgateEula
       # - name: Validating Results (Northwind Databases)
       #   shell: powershell
       #   if: ${{ always() }}
@@ -165,7 +165,12 @@ jobs:
         shell: pwsh
         if: ${{ always() }}
         run: |
-          import-module dbatools
+          if (-not (Get-Module -ListAvailable -Name dbatools)) {
+          Write-Warning "The required module 'dbatools' is not currently installed."
+          Install-Module dbatools -Scope CurrentUser -AllowClobber -Force -ErrorAction Stop
+          Write-Host "INFO: dbatools installed successfully." -ForegroundColor Green
+          }
+          
           Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
           Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false
           $SqlCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ${{ env.dbUser }}, (ConvertTo-SecureString ${{ env.dbPassword }} -AsPlainText -Force)
