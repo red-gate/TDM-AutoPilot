@@ -89,7 +89,6 @@ Function Install-TdmCli {
     Write-Verbose "Config:"
     Write-Verbose "- Download URL: $downloadUrl"
     Write-Verbose "- Installation directory: $installLocation"
-    Write-Verbose "- Temp files directory: $tempPath"
 
     # Check if tdmProgramFiles and tempPath already exist, if not, create them
     if (-not (Test-Path $installLocation)){
@@ -97,32 +96,29 @@ Function Install-TdmCli {
         New-Item -ItemType Directory -Path $installLocation | Out-Null
     }
     if (-not (Test-Path $tempPath)){
-        Write-Verbose "Creating directory for temp files at: $tempPath"
         New-Item -ItemType Directory -Path $tempPath | Out-Null
     }
     # If zipPath already exists, delete it
     if (Test-Path $zipPath){
-        Write-Verbose "Removing old zip file at: $zipPath"
         Remove-Item $zipPath -Force -Recurse | Out-Null
     }
 
     # Ensuring the install location is added to %PATH%
     if ($env:Path -like "*$installLocation*"){
-        Write-Verbose "CLIs folder is already added to %PATH%"
+        #Write-Verbose "CLIs folder is already added to %PATH%"
     }
     else {
-        Write-Verbose "CLIs folder is not added to %PATH%"
-        Write-Verbose "- Adding $cli install location to PATH system variable."
+        #Write-Verbose "CLIs folder is not added to %PATH%"
+        #Write-Verbose "- Adding $cli install location to PATH system variable."
         [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$installLocation", "Machine")
     }
 
     # Download a fresh file with the latest version of the code
-    Write-Verbose "Downloading zip file containing latest version of $cli to: $zipPath"
+    #Write-Verbose "Downloading zip file containing latest version of $cli to: $zipPath"
     $ProgressPreference = 'SilentlyContinue'  # Disable slow progress updates
 	Invoke-WebRequest -Uri $downloadUrl -OutFile "$zipPath" -UseBasicParsing
     
     # Extract the zip
-    Write-Verbose "Extracting zip file to: $unzipPath"
     Add-Type -assembly "System.IO.Compression.Filesystem";
     [IO.Compression.Zipfile]::ExtractToDirectory($zipPath, "$unzipPath");
 
@@ -131,16 +127,14 @@ Function Install-TdmCli {
 
     # Delete old version, if exists
     if (Test-Path $executablePath){
-        Write-Verbose "Removing old version of $cli"
         Remove-Item $executablePath -Force -Recurse | Out-Null
     }
 
     # Move and rename extracted CLI to $executablePath
-    Write-Verbose "Copying new version of $cli to: $installLocation"
+    #Write-Verbose "Copying new version of $cli to: $installLocation"
     Move-Item -Path "$unzipPath\$extractedCli" -Destination $executablePath
 
     # Delete temp files
-    Write-Verbose "Removing temp files at: $tempPath"
     Remove-Item -Recurse -Force "$tempPath"
 
     if (Test-Path $executablePath){
@@ -159,23 +153,23 @@ ForEach ($cli in $clisToInstall){
     if ($installLocation){
         # The CLI is already installed. Let's see if it's up to date.
         if (Test-LatestVersion $cli){
-            Write-Output "$cli is already installed at $installLocation. It's up to date and available to PATH. No action necessary."
+            Write-Host "$cli is already installed at $installLocation. It's up to date and available to PATH. No action necessary." -ForegroundColor DarkCyan
             $installRequired = $false
         }
         else {
-            Write-Output "$cli is already installed, but not up to date. Will install latest version in existing location: $installLocation"
+            Write-Host "$cli is already installed, but not up to date. Will install latest version in existing location: $installLocation" -ForegroundColor DarkCyan
             $installRequired = $true
         }
     }
     else {
-        Write-Output "$cli is not available to PATH. Will perform a fresh install to the default location: $defaultInstallLocation"
+        Write-Host "$cli is not available to PATH. Will perform a fresh install to the default location: $defaultInstallLocation" -ForegroundColor DarkCyan
         $installLocation = $defaultInstallLocation
         $installRequired = $true
     }
     if ($installRequired){
-        Write-Output "  Installing latest version of $cli to $installLocation..."
+        Write-Host "Installing latest version of $cli to $installLocation..." -ForegroundColor DarkCyan
         if (Install-TdmCli $cli -installLocation $installLocation -Verbose) {
-            Write-Output "  $cli installed successfully"
+            Write-Host "INFO: $cli installed successfully." -ForegroundColor Green
         }
         else {
             Write-Error "Failed to install $cli"
