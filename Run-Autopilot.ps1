@@ -356,7 +356,7 @@ if (-not $skipAuth) {
         Write-Host ""
         Write-Host "INFO:  Authorizing rganonymize, and starting a trial (if not already started):" -ForegroundColor DarkCyan
         Write-Host "CMD:    rganonymize auth login --i-agree-to-the-eula" -ForegroundColor Blue
-        & rganonymize auth login --i-agree-to-the-eula
+        & rganonymize auth login --i-agree-to-the-eula  --start-trial
     }
 }
 
