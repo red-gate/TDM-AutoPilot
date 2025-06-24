@@ -29,11 +29,11 @@ On the command line, it's now necessary to run the command rgsubset against our 
 --target-connection-string:
 --options-file:
 
-Example Command: rgsubset run --database-engine=sqlserver --source-connection-string=server=localhost;database=AutopilotProd_Full
-Restore;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes --target-connection-string=server=localhost;
-database=Autopilot_Treated;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes --target-database-write-m
-ode=Overwrite --log-level=Information --options-file=C:\git\TDM-Autopilot\Setup_Files\Data_Treatments_Options_File
-s\rgsubset-options-autopilot.json
+rgsubset run --database-engine=sqlserver --source-connection-string="server=localhost;database=AutopilotProd_Full
+Restore;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes" --target-connection-string=server="localhost;
+database=Autopilot_Treated;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes" --target-database-write-m
+ode=Overwrite --log-level=Information --options-file="C:\git\TDM-Autopilot\Setup_Files\Data_Treatments_Options_File
+s\rgsubset-options-autopilot.json"
 
 # RGANONYMIZE - Getting Started
 Before we get started, please note that all documentation can be found here: https://documentation.red-gate.com/testdatamanager/command-line-interface-cli/anonymization
@@ -42,17 +42,17 @@ On the command line, it's now necessary to run the command rganonymize against o
 
 Classify:
 
-Example Command: rganonymize classify --database-engine=sqlserver --connection-string=server=localhost;database=Autopilot_Treated
-;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes --classification-file=C:\temp\tdm-autopilot\2025051
-6_114921\classification.json --output-all-columns --log-level=Information
+rganonymize classify --database-engine=sqlserver --connection-string="server=localhost;database=Autopilot_Treated
+;Trusted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes" --classification-file="C:\temp\tdm-autopilot\2025051
+6_114921\classification.json" --output-all-columns --log-level=Information
 
 Map:
 
-Example Command: rganonymize map --classification-file="C:\temp\tdm-autopilot\20250516_114921\classification.json" --masking-file
+rganonymize map --classification-file="C:\temp\tdm-autopilot\20250516_114921\classification.json" --masking-file
 ="C:\temp\tdm-autopilot\20250516_114921\masking.json" --log-level=Information
 
 Mask:
 
-Example Command: rganonymize mask --database-engine=sqlserver --connection-string=server=localhost;database=Autopilot_Treated;Tru
-sted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes --masking-file=C:\temp\tdm-autopilot\20250516_114921\ma
-sking.json --log-level=Information
+rganonymize mask --database-engine=sqlserver --connection-string=server="localhost;database=Autopilot_Treated;Tru
+sted_Connection=yes;TrustServerCertificate=yes;Encrypt=yes" --masking-file="C:\temp\tdm-autopilot\20250516_114921\ma
+sking.json" --log-level=Information

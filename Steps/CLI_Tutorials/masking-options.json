@@ -1,0 +1,73 @@
+{
+  "jsonSchemaVersion": 1,
+  "classifications": {
+    "custom": [
+      {
+        "type": "CompanyNames",
+        "confidence": "High",
+        "condition": "Column.Name contains 'Company' AND Column.Name contains 'Name'"
+      }
+    ]
+  },
+  "tables": [
+    {
+      "schema": "dbo",
+      "name": "CustomerDemographics",
+      "exclude": true
+    },
+    {
+      "schema": "dbo",
+      "name": "Shippers",
+      "columns": [
+        {
+          "name": "Phone",
+          "exclude": true
+        }
+      ]
+    }
+  ],
+  "datasets": [
+    {
+      "name": "CompanyNames",
+      "type": "List",
+      "values": [
+        "Redgate Software",
+        "Microsoft",
+        "Google",
+        "Amazon",
+        "Apple",
+        "Facebook",
+        "Twitter"
+      ]
+    },
+    {
+      "name": "JobTitles",
+      "type": "List",
+      "values": [
+        "CEO",
+        "CTO",
+        "Director",
+        "Engineer",
+        "Developer",
+        "Designer",
+        "Analyst",
+        "Consultant"
+      ]
+    },
+    {
+      "name": "Websites",
+      "type": "List",
+      "values": [
+        "https://www.example.com",
+        "https://www.test.com",
+        "https://www.google.com"
+      ]
+    }
+  ],
+  "settings": {
+    "dateTimeFormats": [
+      "YYYY-MM-dd",
+      "yyyy-mm-dd HH:mm:ss"
+    ]
+  }
+}
