@@ -1,0 +1,48 @@
+{
+  "jsonSchemaVersion": 1,
+  "howTo": "Example logic can be found below to show syntax. Simply remove // at the beginnging of the attribute name. For example '//excludedTables' becomes 'excludedTables'",
+  "desiredSize": "50%",
+  "includeTablesRowThreshold": 30,
+  "//excludedTables": [
+    {
+      "schema": "",
+      "name": "store"
+    },
+    {
+      "schema": "",
+      "name": "staff"
+    },
+    {
+      "schema": "",
+      "name": "address",
+      "columns": [
+        {
+          "name": "location",
+          "exclude": true
+        }
+      ]
+    }
+  ],
+  "//staticDataTables": [
+    {
+      "schema": "",
+      "name": "countries"
+    }
+  ],
+  "//manualRelationships": [
+    {
+      "sourceTable": 
+        { 
+          "schema": "", 
+          "name": "SourceTest"
+        },
+      "sourceColumns": [ "TargetId" ],
+      "targetTable": 
+        { 
+          "schema": "dbo", 
+          "name": "TargetTest" 
+        },
+      "targetColumns": [ "Id" ]
+     }
+  ]
+}
